@@ -59,8 +59,28 @@ def test_entry_signals_respect_regime(cfg):
     assert strict.sum() <= loose.sum()
     up = (ind["close"] > ind["sma200"]) & (ind["sma50"] > ind["sma200"])
     assert not (strict & ~up).any()
-    btc_down = pd.Series(False, index=ind.index)
+    btc_down = ind.copy()
+    btc_down["close"] = btc_down["sma200"] * 0.5  # Bitcoin düşüş trendinde
     assert not entry_signals(ind, SetupParams(regime="coin+btc"), btc_down).any()
+    rs = entry_signals(ind, SetupParams(regime="coin+btc+rs"), ind)  # coin = BTC → göreceli güç yok
+    assert not rs.any()
+    weak_btc = ind.copy()
+    weak_btc["close"] = ind["close"] * 0.999 ** np.arange(len(ind))  # BTC yükselişte ama coin'den zayıf
+    weak_btc[["sma50", "sma200"]] = 0.0
+    rs2 = entry_signals(ind, SetupParams(regime="coin+btc+rs"), weak_btc)
+    assert not (rs2 & ~up).any()  # göreceli güç filtresi coin'in kendi trend şartını kaldırmaz
+
+
+def test_breakeven_stop_moves_to_entry_next_day():
+    p = SetupParams(tp_atr=2.0, sl_atr=1.0, max_hold=5, breakeven=0.5)
+    # gün 1: +1 (hedef yolunun yarısı) → gün 2'den itibaren stop = giriş; gün 2 girişin altına iner
+    df = bars([(100, 100, 100, 100), (100, 101.2, 99.8, 101), (100.5, 100.6, 99.7, 99.9)])
+    t = simulate(df, pd.Series([True, False, False], index=df.index), p, fee=0, slippage=0)
+    assert t[0].reason == "be" and t[0].exit == 100
+    # başabaş tetiklenmeden önceki gün asıl stop geçerli
+    df = bars([(100, 100, 100, 100), (100, 100.4, 98.9, 99)])
+    t = simulate(df, pd.Series([True, False], index=df.index), p, fee=0, slippage=0)
+    assert t[0].reason == "sl" and t[0].exit == 99
 
 
 def test_stats():

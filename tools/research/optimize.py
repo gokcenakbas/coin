@@ -29,13 +29,16 @@ from cointracker.signals import score_frame  # noqa: E402
 from cointracker.strategy import SetupParams, entry_signals, simulate, stats  # noqa: E402
 
 TOP_N = 40
+# 2. tur: 1. turda yüksek başarı oranının testte zarara dönmesi üzerine, başabaş stop, göreceli güç ve
+# daha sıkı piyasa filtresi eklendi. Arama alanı aşırı uyumu sınırlamak için küçük tutuldu.
 GRID = {
-    "rsi_entry": [35, 40, 45, 50],
-    "confirm": [True, False],
-    "regime": ["none", "coin", "coin+btc"],
-    "tp_atr": [0.75, 1.0, 1.5, 2.0, 3.0],
-    "sl_atr": [1.5, 2.0, 3.0, 4.0],
-    "max_hold": [10, 20, 40],
+    "rsi_entry": [35, 40, 45],
+    "confirm": [True],
+    "regime": ["coin", "coin+btc", "coin+btc+rs"],
+    "tp_atr": [1.0, 1.5, 2.0],
+    "sl_atr": [1.5, 2.0, 3.0],
+    "max_hold": [10, 20],
+    "breakeven": [None, 0.5],
 }
 MIN_TRAIN_TRADES = 150
 
@@ -74,7 +77,6 @@ def main() -> None:
           f"{test_start:%Y-%m-%d}, Test: {test_start:%Y-%m-%d} → {end:%Y-%m-%d}\n")
 
     btc = frames["BTCUSDT"]
-    btc_ok = btc["close"] > btc["sma200"]
 
     # ---- Mevcut sistemin ölçümü ----
     def baseline(period_end, years):
@@ -113,7 +115,7 @@ def main() -> None:
         p = SetupParams(**dict(zip(keys, values)))
         ekey = (p.rsi_entry, p.confirm, p.regime)
         if ekey not in entry_cache:
-            entry_cache[ekey] = {s: entry_signals(df, p, btc_ok) for s, df in frames.items()}
+            entry_cache[ekey] = {s: entry_signals(df, p, btc) for s, df in frames.items()}
         train, test = [], []
         for sym, df in frames.items():
             ent = entry_cache[ekey][sym]
@@ -145,13 +147,21 @@ def main() -> None:
     for r in eligible[:25]:
         print(line(r))
 
-    target = [r for r in eligible if r["train"]["win_rate"] >= 0.65]
+    target = [r for r in eligible if r["train"]["win_rate"] >= 0.60]
     target.sort(key=lambda r: r["train"]["avg_ret"] * r["train"]["trades"], reverse=True)
-    print("\nEĞİTİMDE ≥ %65 BAŞARI + EN YÜKSEK TOPLAM KÂR (ilk 15)")
+    print("\nEĞİTİMDE ≥ %60 BAŞARI + EN YÜKSEK TOPLAM KÂR (ilk 15)")
     print(header)
     for r in target[:15]:
         print(line(r))
         print(f"      test yıllara göre başarı: {r['test_by_year']}")
+
+    both = [r for r in eligible if r["test"]["trades"] and r["test"]["avg_ret"] > 0]
+    print(f"\nEğitimde uygun {len(eligible)} ayarın {len(both)} tanesi testte de kârlı kaldı.")
+    if both:
+        best = max(both, key=lambda r: r["test"]["win_rate"])
+        print("Testte kârlı kalanlar içinde başarı oranı en yüksek olan (bilgi amaçlı, seçim için kullanılmaz):")
+        print(header)
+        print(line(best))
 
     out_path.write_text(json.dumps({"baseline": {"train": base_train, "test": base_test},
                                     "periods": {"train_start": str(train_start), "test_start": str(test_start),

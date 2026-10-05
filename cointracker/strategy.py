@@ -3,12 +3,15 @@
 Fikir: Kripto paralarda en güvenilir alımlar, ana trend yukarıyken gelen kısa süreli düşüşlerdir.
   Giriş (gün sonu, ertesi gün açılışta işlem):
     * Rejim filtresi: coin 200 günlük ortalamanın üstünde ve 50G ort. > 200G ort. (yükseliş trendi);
-      isteğe bağlı olarak Bitcoin de kendi 200G ortalamasının üstünde (piyasa genel olarak sağlıklı).
+      isteğe bağlı olarak Bitcoin de yükseliş trendinde (piyasa genel olarak sağlıklı) ve
+      coin son 90 günde Bitcoin'den daha iyi performans göstermiş (göreceli güç).
     * Geri çekilme: RSI son `lookback` günde `rsi_entry` eşiğinin altına inmiş.
     * Dönüş onayı: RSI ve kapanış bir önceki güne göre yükselmiş (düşüş durmuş).
   Çıkış (hangisi önce olursa):
     * Kâr al: giriş + `tp_atr` × ATR
     * Zarar-durdur: giriş − `sl_atr` × ATR (aynı gün ikisi de görülürse kötümser varsayımla stop)
+    * Başabaş: fiyat hedefe giden yolun `breakeven` kadarını katederse, ertesi günden itibaren stop
+      giriş fiyatına (masraflar dahil) çekilir.
     * Süre: `max_hold` gün sonunda kapanıştan çık.
 Komisyon ve kayma (slippage) her işlemden düşülür.
 """
@@ -26,10 +29,11 @@ class SetupParams:
     rsi_entry: float = 45.0
     lookback: int = 3
     confirm: bool = True
-    regime: str = "coin+btc"  # "none" | "coin" | "coin+btc"
+    regime: str = "coin+btc"  # "none" | "coin" | "coin+btc" | "coin+btc+rs"
     tp_atr: float = 1.5
     sl_atr: float = 2.0
     max_hold: int = 20
+    breakeven: float | None = None  # hedef yolunun bu oranı katedilince stop girişe çekilir (ör. 0.6)
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -42,7 +46,7 @@ class Trade:
     entry: float
     exit: float
     ret: float
-    reason: str  # "tp" | "sl" | "time"
+    reason: str  # "tp" | "sl" | "be" (başabaş) | "time"
     days: int
 
 
@@ -50,17 +54,26 @@ def uptrend(ind: pd.DataFrame) -> pd.Series:
     return (ind["close"] > ind["sma200"]) & (ind["sma50"] > ind["sma200"])
 
 
-def entry_signals(ind: pd.DataFrame, p: SetupParams, btc_ok: pd.Series | None = None) -> pd.Series:
+def market_filters(btc: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(Bitcoin yükseliş trendinde mi, Bitcoin'in 90 günlük getirisi)"""
+    return uptrend(btc), btc["close"] / btc["close"].shift(90) - 1
+
+
+def entry_signals(ind: pd.DataFrame, p: SetupParams, btc: pd.DataFrame | None = None) -> pd.Series:
     """Gün sonunda kurulum oluştu mu? (True olan günün ertesi açılışında alınır)"""
     rsi = ind["rsi"]
     dipped = (rsi < p.rsi_entry).astype(int).rolling(p.lookback, min_periods=1).max().astype(bool)
     sig = dipped
     if p.confirm:
         sig = sig & (rsi > rsi.shift(1)) & (ind["close"] > ind["close"].shift(1))
-    if p.regime in ("coin", "coin+btc"):
+    if p.regime != "none":
         sig = sig & uptrend(ind)
-    if p.regime == "coin+btc" and btc_ok is not None:
-        sig = sig & btc_ok.reindex(ind.index).fillna(False).astype(bool)
+    if p.regime in ("coin+btc", "coin+btc+rs") and btc is not None:
+        btc_up, btc_ret90 = market_filters(btc)
+        sig = sig & btc_up.reindex(ind.index).fillna(False).astype(bool)
+        if p.regime == "coin+btc+rs":
+            coin_ret90 = ind["close"] / ind["close"].shift(90) - 1
+            sig = sig & (coin_ret90 > btc_ret90.reindex(ind.index)).fillna(False)
     return (sig & ind["atr"].notna() & ind["sma200"].notna()).fillna(False)
 
 
@@ -91,9 +104,18 @@ def simulate(ind: pd.DataFrame, entries: pd.Series, p: SetupParams, fee: float =
         hit_tp = np.flatnonzero(hi >= tp)
         k_sl = hit_sl[0] if hit_sl.size else None
         k_tp = hit_tp[0] if hit_tp.size else None
+        stop_px = sl
+        if p.breakeven:
+            hit_be = np.flatnonzero(hi >= entry + p.breakeven * (tp - entry))
+            if hit_be.size:
+                kb = hit_be[0]  # başabaş stop'u ertesi günden itibaren geçerli
+                be_px = entry * (1 + 2 * fee)
+                later = np.flatnonzero(lo[kb + 1:] <= be_px)
+                if later.size and (k_sl is None or kb + 1 + later[0] < k_sl):
+                    k_sl, stop_px = kb + 1 + later[0], be_px
         if k_sl is not None and (k_tp is None or k_sl <= k_tp):
-            k, reason = k_sl, "sl"
-            px = min(o[i + k], sl) if k > 0 else sl
+            k, reason = k_sl, "sl" if stop_px == sl else "be"
+            px = min(o[i + k], stop_px) if k > 0 else stop_px
         elif k_tp is not None:
             k, reason = k_tp, "tp"
             px = max(o[i + k], tp) if k > 0 else tp
