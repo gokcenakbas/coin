@@ -59,17 +59,57 @@ def app(cfg, monkeypatch):
     engine = Engine(cfg, client=FakeLiveClient())
     engine.store.save("AAAUSDT", make_ohlcv(synthetic_prices(seed=1)))
     engine.store.save("BBBUSDT", make_ohlcv(synthetic_prices(seed=2)))
+    engine.store.save("NEWUSDT", make_ohlcv(synthetic_prices(days=60, seed=4)))  # 220 günden kısa
     monkeypatch.setattr(dashboard, "get_quotes", lambda coin, exchanges=None: [])
-    a = DashboardApp(cfg, engine=engine, symbols=["AAA", "BBB"])
+    sent = []
+    a = DashboardApp(cfg, engine=engine, symbols=["AAA", "BBB", "NEW"], notifier=lambda t, b: sent.append((t, b)))
+    a.sent = sent
     a.refresh(update=False)
     return a
 
 
 def test_signals_payload(app):
     payload = app.signals_payload()
-    assert payload["status"]["phase"] == "ready"
-    assert [i["base"] for i in payload["items"]] and {i["symbol"] for i in payload["items"]} == {"AAAUSDT", "BBBUSDT"}
+    assert payload["status"]["phase"] == "ready" and payload["status"]["app"] is True
+    levels = {i["symbol"]: i["level"] for i in payload["items"]}
+    assert set(levels) == {"AAAUSDT", "BBBUSDT", "NEWUSDT"}
+    assert levels["NEWUSDT"] == "NODATA" and payload["items"][-1]["symbol"] == "NEWUSDT"
+    assert payload["watch"] == {"favorites": [], "alarms": []}
     json.dumps(payload, allow_nan=False)
+
+
+def test_all_coins_listed_as_pending_before_analysis(cfg):
+    a = DashboardApp(cfg, engine=Engine(cfg, client=FakeLiveClient()), symbols=["AAA"])
+    a.universe = ["AAAUSDT", "BBBUSDT"]
+    items = a.signals_payload()["items"]
+    assert [(i["base"], i["level"]) for i in items] == [("AAA", "PENDING"), ("BBB", "PENDING")]
+
+
+def test_watchlist_and_alarms_persist(app, cfg):
+    app.watch.apply({"action": "toggle", "symbol": "aaa"}, "USDT")
+    data = app.watch.apply({"action": "add_alarm", "symbol": "AAA", "kind": "above", "price": "123.5"}, "USDT")
+    assert data["favorites"] == ["AAAUSDT"]
+    alarm = data["alarms"][0]
+    assert alarm["symbol"] == "AAAUSDT" and alarm["price"] == 123.5
+    reloaded = DashboardApp(cfg, engine=app.engine, symbols=["AAA"]).watch.snapshot()
+    assert reloaded == data
+    assert app.watch.apply({"action": "remove_alarm", "id": alarm["id"]}, "USDT")["alarms"] == []
+    assert app.watch.apply({"action": "toggle", "symbol": "AAAUSDT"}, "USDT")["favorites"] == []
+    for bad in ({"action": "add_alarm", "symbol": "AAA", "kind": "sideways", "price": 1},
+                {"action": "add_alarm", "symbol": "AAA", "kind": "above", "price": -5},
+                {"action": "nuke"}):
+        with pytest.raises(ValueError):
+            app.watch.apply(bad, "USDT")
+
+
+def test_signal_change_notifies_only_for_favorites(app):
+    app.watch.apply({"action": "toggle", "symbol": "AAA"}, "USDT")
+    real = app.results["AAAUSDT"].signal.level
+    fake = "STRONG_SELL" if real != "STRONG_SELL" else "STRONG_BUY"
+    app.results["AAAUSDT"].signal.level = fake
+    app.results["BBBUSDT"].signal.level = fake
+    app.refresh(update=False)
+    assert len(app.sent) == 1 and app.sent[0][0].startswith("AAA:")
 
 
 def test_coin_payload(app):
@@ -108,12 +148,35 @@ def test_http_server_routes(app):
         return err.value.code
 
     try:
-        assert b"Coin Canl" in get("/")
+        assert b"Coin Takip" in get("/")
         assert get("/vendor/lightweight-charts.js").startswith(b"/*!")
-        assert len(json.loads(get("/api/signals"))["items"]) == 2
+        assert len(json.loads(get("/api/signals"))["items"]) == 3
         assert json.loads(get("/api/klines?symbol=aaa&interval=1d"))["candles"]
         assert status_of("/api/klines?symbol=aaa&interval=7x") == 400
         assert status_of("/../etc/passwd") == 404
+
+        def post(path, body, ctype="application/json", host=None):
+            req = urllib.request.Request(base + path, data=json.dumps(body).encode(), method="POST",
+                                         headers={"Content-Type": ctype, **({"Host": host} if host else {})})
+            try:
+                with opener.open(req) as resp:
+                    return resp.status, json.loads(resp.read())
+            except urllib.error.HTTPError as err:
+                with err:
+                    return err.code, None
+
+        code, data = post("/api/watchlist", {"action": "toggle", "symbol": "BBB"})
+        assert code == 200 and data["favorites"] == ["BBBUSDT"]
+        assert post("/api/watchlist", {"action": "toggle", "symbol": "AAA"}, ctype="text/plain")[0] == 403
+        assert post("/api/watchlist", {"action": "nuke"})[0] == 400
+        assert post("/api/notify", {"title": "t", "body": "b"}) == (200, {"ok": True})
+        assert app.sent[-1] == ("t", "b")
+        assert post("/api/notify", {"title": "x"}, host="evil.example.com")[0] == 403
+        req = urllib.request.Request(base + "/api/signals", headers={"Host": "evil.example.com:80"})
+        with pytest.raises(urllib.error.HTTPError) as err:
+            opener.open(req)
+        err.value.close()
+        assert err.value.code == 403
     finally:
         server.shutdown()
         server.server_close()

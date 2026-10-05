@@ -7,3 +7,8 @@ data/
 config.yaml
 report.html
 rapor.html
+build/
+dist/
+.build-venv/
+packaging/CoinTakip.icns
+*.dmg

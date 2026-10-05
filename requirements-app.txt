@@ -1,0 +1,2 @@
+# Masaüstü uygulaması (kendi penceresi) için ek paket. Yalnızca uygulamayı derlerken gerekir.
+pywebview>=5.0,<7

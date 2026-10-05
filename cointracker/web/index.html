@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" href="data:,">
-<title>Coin Canlı Panel</title>
+<title>Coin Takip</title>
 <style>
 :root{
   --bg:#f5f6f8;--card:#ffffff;--fg:#16181d;--muted:#667085;--line:#e4e7ec;--hover:#f0f2f5;
@@ -70,13 +70,20 @@ ul.reasons{margin:0;padding-left:18px}ul.reasons li{margin:3px 0}
 .bar>div{height:100%;background:var(--up)}
 td a,.kv a{color:var(--accent);text-decoration:none}
 .err{color:var(--warn);font-size:12px}
+.b-PENDING,.b-NODATA{background:transparent;color:var(--muted);font-weight:500}
+.star{cursor:pointer;color:var(--muted);margin-right:6px;font-size:14px}.star.on{color:#f5b301}
+#toasts{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:8px;z-index:20}
+.toast{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:8px;padding:10px 14px;box-shadow:0 6px 24px rgba(0,0,0,.25);max-width:320px}
+.alarm-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.alarm-row input{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:7px;padding:5px 8px;width:140px}
+.alarms{margin:8px 0 0;padding:0;list-style:none}.alarms li{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--line)}
 footer{color:var(--muted);font-size:12px;text-align:center;padding:4px 16px 20px}
 @media (max-width:700px){.hide-sm{display:none}#chart{height:320px}.tf{grid-template-columns:repeat(2,1fr)}input[type=search]{width:120px}}
 </style>
 </head>
 <body>
 <header>
-  <h1>Coin Canlı Panel</h1>
+  <h1>Coin Takip</h1>
   <span class="pill" title="Binance anlık fiyat akışı"><span id="connDot" class="dot"></span><span id="connText">Bağlanıyor…</span></span>
   <span class="pill" id="dataStatus">Yükleniyor…</span>
   <span class="pill" id="counts"></span>
@@ -95,6 +102,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:4px 16px 20px
       <button data-filter="all" class="active">Tümü</button>
       <button data-filter="buy">AL</button>
       <button data-filter="sell">SAT</button>
+      <button data-filter="fav">⭐ Takip listem</button>
       <span class="spacer"></span>
       <input type="search" id="search" placeholder="Coin ara…">
     </div>
@@ -122,6 +130,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:4px 16px 20px
       <span id="dChg"></span>
       <span id="dBadge"></span>
       <span class="spacer"></span>
+      <button id="favBtn">☆ Takibe al</button>
       <button id="closeDetail" title="Kapat">✕</button>
     </div>
     <div class="toolbar" id="intervals">
@@ -132,9 +141,11 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:4px 16px 20px
     </div>
     <div id="chart"><div id="chartMsg"></div></div>
     <div class="legend"><span><i style="background:var(--sma50)"></i>50 ort.</span><span><i style="background:var(--sma200)"></i>200 ort.</span><span id="lastTick"></span></div>
+    <div id="alarmBox"></div>
     <div id="detailBody"></div>
   </section>
 </main>
+<div id="toasts"></div>
 <footer>⚠️ Yatırım tavsiyesi değildir. Sinyaller teknik göstergelere dayalı otomatik hesaplamalardır; geçmiş performans geleceği garanti etmez.
 Grafikler: <a href="https://www.tradingview.com/" target="_blank" rel="noopener">TradingView Lightweight Charts</a>.</footer>
 
@@ -164,6 +175,7 @@ const fmtUsd = v => v == null ? "-" : "$" + compact.format(v);
 const state = {
   items: [], bySym: {}, live: {}, filter: "all", search: "", sort: {key: "score", dir: -1},
   selected: null, interval: "1h", rowEls: {}, hist: {}, lastMove: {}, moves: [], detailTimer: null,
+  watch: {favorites: [], alarms: []}, app: false, firedAlarms: new Set(), autoSelected: false,
 };
 
 /* ---------------- 5 yıllık sinyal listesi ---------------- */
@@ -173,7 +185,13 @@ async function loadSignals() {
     const d = await (await fetch("/api/signals")).json();
     state.items = d.items;
     state.bySym = Object.fromEntries(d.items.map(i => [i.symbol, i]));
+    state.watch = d.watch || state.watch;
+    if (d.status.app && !state.app) {
+      state.app = true;
+      const b = $("#notifyBtn"); b.textContent = "🔔 Mac bildirimleri açık"; b.disabled = true;
+    }
     renderStatus(d.status);
+    if (state.selected) { renderBadge(); renderFavBtn(); }
     if (d.status.phase !== "ready") delay = 3000;
     renderTable();
   } catch (e) {
@@ -185,14 +203,15 @@ async function loadSignals() {
 
 function renderStatus(s) {
   const el = $("#dataStatus");
-  if (s.phase === "downloading") el.textContent = `5 yıllık veri indiriliyor ${s.done}/${s.total}`;
+  if (s.phase === "downloading") el.textContent = `Veriler güncelleniyor ${s.done}/${s.total}`;
   else if (s.phase === "analyzing") el.textContent = "Analiz ediliyor…";
   else if (s.phase === "error") el.textContent = "Hata: " + s.error;
   else if (s.phase === "ready" && s.updated) el.textContent = "Sinyaller: " + new Date(s.updated).toLocaleTimeString("tr-TR", {hour: "2-digit", minute: "2-digit"});
   else el.textContent = "Başlatılıyor…";
+  const ready = state.items.filter(i => i.score != null).length;
   const buys = state.items.filter(i => i.level.endsWith("BUY")).length;
   const sells = state.items.filter(i => i.level.endsWith("SELL")).length;
-  $("#counts").innerHTML = `${state.items.length} coin · <span class="up">${buys} AL</span> · <span class="down">${sells} SAT</span>`;
+  $("#counts").innerHTML = `${ready}/${state.items.length} coin · <span class="up">${buys} AL</span> · <span class="down">${sells} SAT</span>`;
 }
 
 function rowValue(item, key) {
@@ -205,10 +224,10 @@ function rowValue(item, key) {
 }
 
 function renderTable() {
-  const q = state.search.trim().toUpperCase();
-  let items = state.items.filter(i =>
-    (state.filter === "all" || (state.filter === "buy" ? i.level.endsWith("BUY") : i.level.endsWith("SELL"))) &&
-    (!q || i.base.includes(q)));
+  const q = state.search.trim().toUpperCase(), favs = favSet();
+  const pass = i => state.filter === "all" || (state.filter === "fav" ? favs.has(i.symbol) :
+    state.filter === "buy" ? i.level.endsWith("BUY") : i.level.endsWith("SELL"));
+  let items = state.items.filter(i => pass(i) && (!q || i.base.includes(q)));
   const {key, dir} = state.sort;
   items.sort((a, b) => {
     const x = rowValue(a, key), y = rowValue(b, key);
@@ -220,15 +239,15 @@ function renderTable() {
   tbody.innerHTML = items.map(i => {
     const chg = rowValue(i, "chg24");
     return `<tr data-s="${esc(i.symbol)}" class="${i.symbol === state.selected ? "sel" : ""}">
-      <td><b>${esc(i.base)}</b></td>
+      <td><span class="star ${favs.has(i.symbol) ? "on" : ""}" data-star="${esc(i.symbol)}" title="Takip listesine ekle/çıkar">${favs.has(i.symbol) ? "★" : "☆"}</span><b>${esc(i.base)}</b></td>
       <td data-f="price">${fmtPrice(rowValue(i, "price"))}</td>
       <td data-f="chg" class="${cls(chg)}">${fmtPct(chg)}</td>
       <td data-f="vol" class="hide-sm">${fmtUsd(rowValue(i, "vol24"))}</td>
-      <td><span class="badge b-${i.level}">${esc(i.label)}</span> <span class="muted">${i.score > 0 ? "+" : ""}${i.score}</span></td>
+      <td><span class="badge b-${i.level}">${esc(i.label)}</span> <span class="muted">${i.score == null ? "" : (i.score > 0 ? "+" : "") + i.score}</span></td>
       <td class="hide-sm">${i.rsi == null ? "-" : i.rsi.toFixed(0)}</td>
       <td class="hide-sm">${i.pct_rank_5y == null ? "-" : "%" + (i.pct_rank_5y * 100).toFixed(0)}</td>
       <td class="hide-sm ${cls(i.bt_return)}">${fmtPct(i.bt_return)}</td></tr>`;
-  }).join("") || `<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">Henüz veri yok — ilk açılışta 5 yıllık veriler indiriliyor.</td></tr>`;
+  }).join("") || `<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">${state.filter === "fav" ? "Takip listeniz boş — bir coinin yanındaki ☆ işaretine tıklayın." : state.items.length ? "Bu filtreye uyan coin yok." : "Coin listesi yükleniyor…"}</td></tr>`;
   tbody.querySelectorAll("tr[data-s]").forEach(tr => state.rowEls[tr.dataset.s] = tr);
 }
 
@@ -253,6 +272,7 @@ function onTickers(list) {
     const tick = {c: +t.c, o: +t.o, h: +t.h, l: +t.l, q: +t.q};
     state.live[t.s] = tick;
     trackMove(t.s, tick.c, now);
+    checkAlarms(t.s, tick.c);
     const tr = state.rowEls[t.s];
     if (tr) {
       const pc = tr.querySelector('[data-f="price"]');
@@ -283,9 +303,72 @@ function trackMove(sym, price, now) {
   state.moves.unshift({sym, base, chg, price, at: new Date(now), mins});
   state.moves = state.moves.slice(0, 30);
   renderMoves();
-  if ("Notification" in window && Notification.permission === "granted") {
-    new Notification(`${base} ${chg > 0 ? "▲" : "▼"} ${fmtPct(chg)}`, {body: `${mins} dk içinde · fiyat ${fmtPrice(price)} USDT`, tag: sym});
+  const favs = favSet();
+  if (!favs.size || favs.has(sym)) notify(`${base} ${chg > 0 ? "▲" : "▼"} ${fmtPct(chg)}`, `${mins} dk içinde · fiyat ${fmtPrice(price)} USDT`);
+}
+
+/* ---------------- Bildirim, takip listesi ve fiyat alarmları ---------------- */
+const favSet = () => new Set(state.watch.favorites);
+
+function toast(title, body) {
+  const el = document.createElement("div");
+  el.className = "toast";
+  el.innerHTML = `<b>${esc(title)}</b><div class="muted">${esc(body)}</div>`;
+  $("#toasts").prepend(el);
+  setTimeout(() => el.remove(), 12000);
+}
+
+function notify(title, body) {
+  toast(title, body);
+  if (state.app) {
+    fetch("/api/notify", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({title, body})}).catch(() => {});
+  } else if ("Notification" in window && Notification.permission === "granted") {
+    new Notification(title, {body});
   }
+}
+
+async function watchAction(body) {
+  const r = await fetch("/api/watchlist", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || r.status);
+  state.watch = d;
+  renderTable(); renderFavBtn(); renderAlarms();
+}
+
+function checkAlarms(sym, price) {
+  for (const a of state.watch.alarms) {
+    if (a.symbol !== sym || state.firedAlarms.has(a.id)) continue;
+    if ((a.kind === "above" && price >= a.price) || (a.kind === "below" && price <= a.price)) {
+      state.firedAlarms.add(a.id);
+      const base = (state.bySym[sym] || {}).base || sym;
+      notify(`🔔 ${base} ${fmtPrice(a.price)} ${a.kind === "above" ? "üzerine çıktı" : "altına indi"}`, `Şu an ${fmtPrice(price)} USDT`);
+      watchAction({action: "remove_alarm", id: a.id}).catch(() => {});
+    }
+  }
+}
+
+function renderFavBtn() {
+  const on = favSet().has(state.selected), b = $("#favBtn");
+  b.textContent = on ? "★ Takipte" : "☆ Takibe al";
+  b.classList.toggle("active", on);
+}
+
+function renderBadge() {
+  const item = state.bySym[state.selected];
+  $("#dBadge").innerHTML = item ? `<span class="badge b-${item.level}">${esc(item.label)}${item.score == null ? "" : " " + (item.score > 0 ? "+" : "") + item.score}</span>` : "";
+}
+
+function renderAlarms() {
+  const sym = state.selected;
+  if (!sym) return;
+  const list = state.watch.alarms.filter(a => a.symbol === sym);
+  const live = state.live[sym];
+  $("#alarmBox").innerHTML = `<section class="card" style="margin-top:12px"><h2>Fiyat alarmı</h2>
+    <div class="alarm-row"><input id="alarmPrice" type="text" inputmode="decimal" placeholder="${live ? "ör. " + fmtPrice(live.c) : "Fiyat (USDT)"}">
+    <button data-kind="above">▲ Üstüne çıkınca</button><button data-kind="below">▼ Altına inince</button></div>
+    ${list.length ? `<ul class="alarms">${list.map(a => `<li><span>${a.kind === "above" ? "▲ Üstüne çıkınca" : "▼ Altına inince"} <b>${fmtPrice(a.price)}</b></span>
+      <button data-del="${esc(a.id)}" title="Alarmı sil">✕</button></li>`).join("")}</ul>`
+      : `<p class="muted" style="margin:6px 0 0">Bu coin için alarm yok. Alarm çalınca ${state.app ? "Mac bildirimi" : "bildirim"} gelir ve alarm silinir.</p>`}</section>`;
 }
 
 function renderMoves() {
@@ -394,7 +477,7 @@ function selectCoin(sym) {
   $("#detail").style.display = "";
   const item = state.bySym[sym];
   $("#dSym").textContent = item ? item.base + " / USDT" : sym;
-  $("#dBadge").innerHTML = item ? `<span class="badge b-${item.level}">${esc(item.label)} ${item.score > 0 ? "+" : ""}${item.score}</span>` : "";
+  renderBadge(); renderFavBtn(); renderAlarms();
   renderHeadPrice();
   $("#detailBody").innerHTML = `<p class="muted">Ayrıntılar yükleniyor…</p>`;
   if (chart) { candleS.setData([]); volS.setData([]); }
@@ -488,7 +571,31 @@ document.querySelectorAll("th[data-sort]").forEach(th => th.onclick = () => {
   state.sort = {key, dir: state.sort.key === key ? -state.sort.dir : (key === "symbol" ? 1 : -1)};
   renderTable();
 });
-$("#rows").onclick = e => { const tr = e.target.closest("tr[data-s]"); if (tr) selectCoin(tr.dataset.s); };
+$("#rows").onclick = e => {
+  const star = e.target.closest("[data-star]");
+  if (star) { watchAction({action: "toggle", symbol: star.dataset.star}).catch(err => toast("Hata", err.message)); return; }
+  const tr = e.target.closest("tr[data-s]");
+  if (tr) selectCoin(tr.dataset.s);
+};
+$("#favBtn").onclick = () => watchAction({action: "toggle", symbol: state.selected}).catch(err => toast("Hata", err.message));
+$("#alarmBox").onclick = e => {
+  const del = e.target.closest("[data-del]");
+  if (del) { watchAction({action: "remove_alarm", id: del.dataset.del}).catch(err => toast("Hata", err.message)); return; }
+  const btn = e.target.closest("[data-kind]");
+  if (!btn) return;
+  const raw = $("#alarmPrice").value.trim().replace(/\s/g, "");
+  // Türkçe yazımı da kabul et: "0,52", "65.000", "65.000,5"
+  let norm = raw;
+  if (raw.includes(",")) norm = raw.replace(/\./g, "").replace(",", ".");
+  else if (/^[1-9]\d{0,2}(\.\d{3})+$/.test(raw)) norm = raw.replace(/\./g, "");
+  const price = parseFloat(norm);
+  if (!(price > 0)) { toast("Geçersiz fiyat", "Lütfen bir fiyat yazın, ör. 65000 veya 0,52"); return; }
+  const live = state.live[state.selected], kind = btn.dataset.kind;
+  if (live && ((kind === "above" && live.c >= price) || (kind === "below" && live.c <= price))) {
+    toast("Alarm kurulmadı", `Fiyat zaten ${fmtPrice(live.c)}; seviye ${kind === "above" ? "üstünde" : "altında"}.`); return;
+  }
+  watchAction({action: "add_alarm", symbol: state.selected, kind, price}).catch(err => toast("Hata", err.message));
+};
 $("#moves").onclick = e => { const m = e.target.closest("[data-s]"); if (m) selectCoin(m.dataset.s); };
 $("#intervals").onclick = e => { const b = e.target.closest("[data-iv]"); if (b) { state.interval = b.dataset.iv; loadChart(); } };
 $("#showBB").onchange = () => loadChart();
@@ -507,8 +614,10 @@ if ("Notification" in window && Notification.permission === "granted") $("#notif
 $("#moveThr").textContent = MOVE_THRESHOLD;
 
 loadSignals().then(() => {
-  const initial = decodeURIComponent(location.hash.slice(1));
-  if (initial) selectCoin(initial);
+  // Açılışta bir coin seç: adres çubuğundaki, takip listesindeki ilk coin ya da BTC
+  const initial = decodeURIComponent(location.hash.slice(1)) ||
+    state.watch.favorites.find(f => state.bySym[f]) || (state.bySym.BTCUSDT ? "BTCUSDT" : "");
+  if (initial && (location.hash || window.innerWidth >= 1200)) selectCoin(initial);
 });
 connectMarket();
 </script>

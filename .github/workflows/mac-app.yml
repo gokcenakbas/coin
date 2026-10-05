@@ -1,0 +1,63 @@
+# "Coin Takip.app" uygulamasını gerçek Mac'lerde (Apple Silicon ve Intel) derler, test eder ve .dmg olarak yükler.
+# İndirmek için: Actions → mac-app → son çalıştırma → Artifacts.
+# "v1.0.0" gibi bir etiket gönderilirse .dmg dosyaları ayrıca Releases sayfasına eklenir.
+name: mac-app
+
+on:
+  push:
+    paths:
+      - "cointracker/**"
+      - "packaging/**"
+      - "requirements*.txt"
+      - ".github/workflows/mac-app.yml"
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            label: Apple-Silicon
+          - runner: macos-15-intel
+            label: Intel
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Uygulamayı derle
+        env:
+          PYTHON: python
+        run: bash packaging/build_mac.sh
+
+      - name: Uygulamayı test et (gerçek Binance verisiyle, pencere açmadan)
+        timeout-minutes: 8
+        run: '"dist/Coin Takip.app/Contents/MacOS/Coin Takip" --smoke-test'
+
+      - name: DMG oluştur
+        run: |
+          mkdir -p dmg
+          cp -R "dist/Coin Takip.app" dmg/
+          ln -s /Applications dmg/Applications
+          hdiutil create -volname "Coin Takip" -srcfolder dmg -ov -format UDZO "CoinTakip-${{ matrix.label }}.dmg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CoinTakip-${{ matrix.label }}
+          path: CoinTakip-${{ matrix.label }}.dmg
+          retention-days: 30
+
+      - name: Sürüm sayfasına ekle
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: CoinTakip-${{ matrix.label }}.dmg

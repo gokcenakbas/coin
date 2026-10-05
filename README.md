@@ -21,6 +21,34 @@ sinyal değiştiğinde **Telegram / Discord / Slack** üzerinden uyarı göndere
 | **Uyarılar** | Sinyal seviyesi değiştiğinde (ör. BEKLE → AL) ve belirlediğiniz fiyat alarmlarında bildirim gönderir. Aynı uyarı tekrar tekrar gelmez. |
 | **HTML rapor** | Tüm coinleri sıralanabilir tek bir tabloda gösterir. |
 
+## Mac uygulaması: Coin Takip
+
+Coin Takip kendi penceresinde açılan bir Mac uygulamasıdır; tarayıcı veya Terminal gerekmez.
+
+- **Açılışta her şey güncel:** Tüm coinler listede hemen görünür ve fiyatları canlı akar. 5 yıllık analizler coin coin hazırlanıp listeye eklenir.
+- **Coin coin takip:** Herhangi bir coinin yanındaki ☆ işaretine tıklayınca coin **⭐ Takip listem** sekmesine eklenir. Takip listenizdeki bir coinin sinyali değişince (ör. BEKLE → AL) **Mac bildirimi** gelir.
+- **Fiyat alarmı:** Coinin sayfasından "şu fiyatın üstüne çıkınca / altına inince" alarmı kurulur. Alarm çalınca Mac bildirimi gelir.
+- Canlı panelin tüm özellikleri (grafikler, emir defteri, zaman dilimleri, nereden alınır) uygulamada da vardır.
+
+### Kurulum — seçenek 1: kendi Mac'inizde oluşturun (önerilen)
+1. Python'u kurun: https://www.python.org/downloads/
+2. Projeyi indirin (bir kerelik): `git clone https://github.com/gokcenakbas/coin.git`
+3. `coin` klasöründeki **`mac_uygulama_olustur.command`** dosyasına çift tıklayın.
+   Uygulama 3-5 dakikada oluşturulur, **Uygulamalar** klasörüne kurulur ve açılır.
+   Bundan sonra uygulamayı Launchpad'den ya da Dock'tan açabilirsiniz.
+
+### Kurulum — seçenek 2: hazır .dmg indirin
+GitHub'da **Actions → mac-app** altındaki son başarılı çalıştırmanın **Artifacts** bölümünden indirin
+(M1/M2/M3/M4 işlemcili Mac'ler için `CoinTakip-Apple-Silicon`, Intel işlemcili Mac'ler için `CoinTakip-Intel`).
+`.dmg` dosyasını açıp uygulamayı Uygulamalar klasörüne sürükleyin.
+
+Uygulama Apple tarafından imzalanmadığı için ilk açılışta macOS uyarı verir. Bunu bir kez geçmeniz yeterli:
+**Sistem Ayarları → Gizlilik ve Güvenlik** sayfasının en altındaki **"Yine de Aç"** düğmesine tıklayın.
+(Seçenek 1 ile kendi Mac'inizde oluşturulan uygulamada bu uyarı çıkmaz.)
+
+Uygulamanın verileri, takip listesi ve günlük dosyası `~/Library/Application Support/CoinTakip/` klasöründe tutulur.
+Ayarları değiştirmek için `config.example.yaml` dosyasını bu klasöre `config.yaml` adıyla kopyalayıp düzenleyin.
+
 ## Canlı panel (önerilen)
 
 ```bash
@@ -161,9 +189,11 @@ cointracker/
   report.py      HTML rapor
   live.py        gün içi sinyaller, emir defteri, 24 saatlik özet
   dashboard.py   canlı panel sunucusu
+  app.py         Mac uygulaması (kendi penceresi, Mac bildirimleri)
   web/           panel arayüzü (index.html) ve grafik kütüphanesi
   cli.py         komut satırı
 tests/           pytest testleri (ağ gerektirmez)
+packaging/       uygulama paketleme (PyInstaller), simge, derleme betiği
 ```
 
 ## Testler
