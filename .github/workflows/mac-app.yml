@@ -5,6 +5,7 @@ name: mac-app
 
 on:
   push:
+    branches: ["**"]
     paths:
       - "cointracker/**"
       - "packaging/**"
