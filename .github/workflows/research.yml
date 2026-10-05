@@ -1,0 +1,31 @@
+# Strateji araştırması: gerçek Binance verisiyle (son 5 yıl, en büyük 40 coin) başarı oranlarını ölçer.
+# Sonuçlar iş günlüğünde ve "research" artifact'ında.
+name: research
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "tools/research/**"
+      - "cointracker/strategy.py"
+      - ".github/workflows/research.yml"
+  workflow_dispatch:
+
+jobs:
+  optimize:
+    runs-on: macos-14
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Araştırmayı çalıştır
+        run: python tools/research/optimize.py research.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: research
+          path: research.json
