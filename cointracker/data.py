@@ -76,6 +76,17 @@ class BinanceClient:
             start_ms = batch[-1][0] + DAY_MS
         return klines_to_frame(rows)
 
+    def recent_klines(self, symbol: str, interval: str = "1h", limit: int = 500) -> pd.DataFrame:
+        """Son `limit` mum (1m, 5m, 15m, 1h, 4h, 1d...). Gün içi grafik ve sinyaller için."""
+        rows = self._get("/api/v3/klines", {"symbol": symbol, "interval": interval, "limit": min(limit, 1000)})
+        return klines_to_frame(rows, normalize=False)
+
+    def depth(self, symbol: str, limit: int = 500) -> dict:
+        return self._get("/api/v3/depth", {"symbol": symbol, "limit": limit})
+
+    def ticker_24h(self, symbol: str) -> dict:
+        return self._get("/api/v3/ticker/24hr", {"symbol": symbol})
+
     def tickers_24h(self) -> list[dict]:
         return self._get("/api/v3/ticker/24hr")
 
@@ -88,14 +99,16 @@ class BinanceClient:
         }
 
 
-def klines_to_frame(rows: list[list]) -> pd.DataFrame:
+def klines_to_frame(rows: list[list], normalize: bool = True) -> pd.DataFrame:
+    """Binance mumlarını DataFrame'e çevirir. normalize=True günlük veride saati sıfırlar."""
     if not rows:
         return pd.DataFrame(columns=OHLCV_COLUMNS, index=pd.DatetimeIndex([], name="date"))
     df = pd.DataFrame(
         [[r[0], r[1], r[2], r[3], r[4], r[5], r[7]] for r in rows],
         columns=["open_time", *OHLCV_COLUMNS],
     )
-    df.index = pd.to_datetime(df.pop("open_time"), unit="ms", utc=True).dt.tz_localize(None).dt.normalize()
+    index = pd.to_datetime(df.pop("open_time"), unit="ms", utc=True).dt.tz_localize(None)
+    df.index = index.dt.normalize() if normalize else index
     df.index.name = "date"
     return df.astype(float)
 

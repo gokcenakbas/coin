@@ -1,0 +1,516 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Coin Canlı Panel</title>
+<style>
+:root{
+  --bg:#f5f6f8;--card:#ffffff;--fg:#16181d;--muted:#667085;--line:#e4e7ec;--hover:#f0f2f5;
+  --up:#0e9f6e;--down:#e02d3c;--up-bg:rgba(14,159,110,.12);--down-bg:rgba(224,45,60,.12);
+  --accent:#2f6fed;--warn:#b54708;--chart-grid:#eef0f3;--sma50:#d97706;--sma200:#7c3aed;--bb:#98a2b3;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1115;--card:#171a21;--fg:#e6e8ec;--muted:#8b93a3;--line:#262a33;--hover:#1e222b;
+  --up:#2ebd85;--down:#f6465d;--up-bg:rgba(46,189,133,.15);--down-bg:rgba(246,70,93,.15);
+  --accent:#5b8cff;--warn:#f79009;--chart-grid:#1d2129;--sma50:#f5a524;--sma200:#a78bfa;--bb:#5d6575;
+}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+header{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--line);
+  display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;padding:10px 16px}
+header h1{font-size:16px;margin:0;font-weight:650}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;background:var(--hover);color:var(--muted);font-size:12px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.dot.on{background:var(--up);box-shadow:0 0 0 3px var(--up-bg)}
+.spacer{flex:1}
+button,.btn{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:7px;padding:5px 10px;cursor:pointer}
+button:hover{background:var(--hover)}
+button.active{background:var(--accent);border-color:var(--accent);color:#fff}
+input[type=search]{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:7px;padding:5px 10px;width:160px}
+main{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;padding:14px 16px;max-width:1700px;margin:0 auto}
+@media (min-width:1200px){main.has-detail{grid-template-columns:minmax(0,1fr) minmax(0,1.25fr)}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px}
+.card h2{font-size:13px;margin:0 0 8px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.toolbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px}
+.tablewrap{overflow:auto;max-height:calc(100vh - 210px)}
+table{border-collapse:collapse;width:100%}
+th,td{padding:6px 8px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}
+th{position:sticky;top:0;background:var(--card);color:var(--muted);font-weight:600;cursor:pointer;user-select:none;z-index:1}
+th:first-child,td:first-child{text-align:left}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--hover)}
+tbody tr.sel{background:var(--hover);box-shadow:inset 3px 0 0 var(--accent)}
+.up{color:var(--up)}.down{color:var(--down)}.muted{color:var(--muted)}
+.badge{display:inline-block;padding:1px 8px;border-radius:6px;font-weight:600;font-size:12px}
+.b-STRONG_BUY{background:var(--up);color:#fff}.b-BUY{background:var(--up-bg);color:var(--up)}
+.b-HOLD{background:var(--hover);color:var(--muted)}.b-SELL{background:var(--down-bg);color:var(--down)}
+.b-STRONG_SELL{background:var(--down);color:#fff}
+.flash-up{animation:fu .8s}.flash-down{animation:fd .8s}
+@keyframes fu{from{background:var(--up-bg)}to{background:transparent}}
+@keyframes fd{from{background:var(--down-bg)}to{background:transparent}}
+#moves{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px}
+.move{flex:none;border:1px solid var(--line);border-radius:8px;padding:4px 10px;cursor:pointer;background:var(--card)}
+.detail-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 14px;margin-bottom:8px}
+.detail-head .sym{font-size:20px;font-weight:700}
+.detail-head .px{font-size:22px;font-weight:650;font-variant-numeric:tabular-nums}
+#chart{height:420px;position:relative}
+#chartMsg{position:absolute;inset:0;display:none;align-items:center;justify-content:center;color:var(--muted);text-align:center;padding:20px;z-index:2}
+.legend{display:flex;gap:12px;font-size:12px;color:var(--muted);margin-top:6px}
+.legend i{display:inline-block;width:12px;height:2px;vertical-align:middle;margin-right:4px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:12px}
+.tf{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.tf>div{border:1px solid var(--line);border-radius:8px;padding:8px;text-align:center}
+.tf b{display:block;font-size:12px;color:var(--muted);font-weight:600;margin-bottom:4px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px}
+.kv span:nth-child(even){text-align:right;font-variant-numeric:tabular-nums}
+ul.reasons{margin:0;padding-left:18px}ul.reasons li{margin:3px 0}
+.bar{height:10px;border-radius:5px;background:var(--down);overflow:hidden;margin:6px 0}
+.bar>div{height:100%;background:var(--up)}
+td a,.kv a{color:var(--accent);text-decoration:none}
+.err{color:var(--warn);font-size:12px}
+footer{color:var(--muted);font-size:12px;text-align:center;padding:4px 16px 20px}
+@media (max-width:700px){.hide-sm{display:none}#chart{height:320px}.tf{grid-template-columns:repeat(2,1fr)}input[type=search]{width:120px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Coin Canlı Panel</h1>
+  <span class="pill" title="Binance anlık fiyat akışı"><span id="connDot" class="dot"></span><span id="connText">Bağlanıyor…</span></span>
+  <span class="pill" id="dataStatus">Yükleniyor…</span>
+  <span class="pill" id="counts"></span>
+  <span class="spacer"></span>
+  <button id="notifyBtn" title="Hızlı fiyat hareketlerinde masaüstü bildirimi">🔔 Bildirimleri aç</button>
+</header>
+
+<main id="main">
+  <section class="card" style="grid-column:1/-1;display:none" id="movesCard">
+    <h2>Hızlı hareketler (5 dk içinde ±<span id="moveThr"></span>%)</h2>
+    <div id="moves"></div>
+  </section>
+
+  <section class="card" id="listCard">
+    <div class="toolbar">
+      <button data-filter="all" class="active">Tümü</button>
+      <button data-filter="buy">AL</button>
+      <button data-filter="sell">SAT</button>
+      <span class="spacer"></span>
+      <input type="search" id="search" placeholder="Coin ara…">
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr>
+          <th data-sort="symbol">Coin</th>
+          <th data-sort="price">Fiyat</th>
+          <th data-sort="chg24">24s</th>
+          <th data-sort="vol24" class="hide-sm">24s Hacim</th>
+          <th data-sort="score">Sinyal</th>
+          <th data-sort="rsi" class="hide-sm">RSI</th>
+          <th data-sort="pct_rank_5y" class="hide-sm" title="Fiyatın son 5 yıl içindeki konumu (0 = en ucuz)">5y %</th>
+          <th data-sort="bt_return" class="hide-sm" title="Strateji getirisi, son 5 yıl">Strateji 5y</th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card" id="detail" style="display:none">
+    <div class="detail-head">
+      <span class="sym" id="dSym"></span>
+      <span class="px" id="dPx"></span>
+      <span id="dChg"></span>
+      <span id="dBadge"></span>
+      <span class="spacer"></span>
+      <button id="closeDetail" title="Kapat">✕</button>
+    </div>
+    <div class="toolbar" id="intervals">
+      <button data-iv="1m">1dk</button><button data-iv="5m">5dk</button><button data-iv="15m">15dk</button>
+      <button data-iv="1h">1sa</button><button data-iv="4h">4sa</button><button data-iv="1d">1g</button><button data-iv="1w">1h</button>
+      <span class="spacer"></span>
+      <label class="muted"><input type="checkbox" id="showBB"> Bollinger</label>
+    </div>
+    <div id="chart"><div id="chartMsg"></div></div>
+    <div class="legend"><span><i style="background:var(--sma50)"></i>50 ort.</span><span><i style="background:var(--sma200)"></i>200 ort.</span><span id="lastTick"></span></div>
+    <div id="detailBody"></div>
+  </section>
+</main>
+<footer>⚠️ Yatırım tavsiyesi değildir. Sinyaller teknik göstergelere dayalı otomatik hesaplamalardır; geçmiş performans geleceği garanti etmez.
+Grafikler: <a href="https://www.tradingview.com/" target="_blank" rel="noopener">TradingView Lightweight Charts</a>.</footer>
+
+<script src="/vendor/lightweight-charts.js"></script>
+<script>
+"use strict";
+const MOVE_THRESHOLD = 3;           // %
+const MOVE_WINDOW_MS = 5 * 60e3;
+const MOVE_COOLDOWN_MS = 15 * 60e3;
+const WS_BASES = ["wss://data-stream.binance.vision", "wss://stream.binance.com:9443"];
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const compact = new Intl.NumberFormat("tr-TR", {notation: "compact", maximumFractionDigits: 1});
+
+function fmtPrice(p) {
+  if (p == null || !isFinite(p)) return "-";
+  if (p >= 1000) return p.toLocaleString("tr-TR", {maximumFractionDigits: 0});
+  if (p >= 1) return p.toLocaleString("tr-TR", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  return p.toLocaleString("tr-TR", {maximumSignificantDigits: 4});
+}
+const fmtPct = v => v == null || !isFinite(v) ? "-" : (v > 0 ? "+" : "") + (v * 100).toFixed(2).replace(".", ",") + "%";
+const cls = v => v > 0 ? "up" : v < 0 ? "down" : "";
+const fmtUsd = v => v == null ? "-" : "$" + compact.format(v);
+
+const state = {
+  items: [], bySym: {}, live: {}, filter: "all", search: "", sort: {key: "score", dir: -1},
+  selected: null, interval: "1h", rowEls: {}, hist: {}, lastMove: {}, moves: [], detailTimer: null,
+};
+
+/* ---------------- 5 yıllık sinyal listesi ---------------- */
+async function loadSignals() {
+  let delay = 60e3;
+  try {
+    const d = await (await fetch("/api/signals")).json();
+    state.items = d.items;
+    state.bySym = Object.fromEntries(d.items.map(i => [i.symbol, i]));
+    renderStatus(d.status);
+    if (d.status.phase !== "ready") delay = 3000;
+    renderTable();
+  } catch (e) {
+    $("#dataStatus").textContent = "Sunucuya ulaşılamıyor";
+    delay = 5000;
+  }
+  setTimeout(loadSignals, delay);
+}
+
+function renderStatus(s) {
+  const el = $("#dataStatus");
+  if (s.phase === "downloading") el.textContent = `5 yıllık veri indiriliyor ${s.done}/${s.total}`;
+  else if (s.phase === "analyzing") el.textContent = "Analiz ediliyor…";
+  else if (s.phase === "error") el.textContent = "Hata: " + s.error;
+  else if (s.phase === "ready" && s.updated) el.textContent = "Sinyaller: " + new Date(s.updated).toLocaleTimeString("tr-TR", {hour: "2-digit", minute: "2-digit"});
+  else el.textContent = "Başlatılıyor…";
+  const buys = state.items.filter(i => i.level.endsWith("BUY")).length;
+  const sells = state.items.filter(i => i.level.endsWith("SELL")).length;
+  $("#counts").innerHTML = `${state.items.length} coin · <span class="up">${buys} AL</span> · <span class="down">${sells} SAT</span>`;
+}
+
+function rowValue(item, key) {
+  const live = state.live[item.symbol];
+  if (key === "price") return live ? live.c : item.price;
+  if (key === "chg24") return live ? live.c / live.o - 1 : null;
+  if (key === "vol24") return live ? live.q : null;
+  if (key === "symbol") return item.symbol;
+  return item[key];
+}
+
+function renderTable() {
+  const q = state.search.trim().toUpperCase();
+  let items = state.items.filter(i =>
+    (state.filter === "all" || (state.filter === "buy" ? i.level.endsWith("BUY") : i.level.endsWith("SELL"))) &&
+    (!q || i.base.includes(q)));
+  const {key, dir} = state.sort;
+  items.sort((a, b) => {
+    const x = rowValue(a, key), y = rowValue(b, key);
+    if (x == null) return 1; if (y == null) return -1;
+    return (typeof x === "string" ? x.localeCompare(y) : x - y) * dir;
+  });
+  state.rowEls = {};
+  const tbody = $("#rows");
+  tbody.innerHTML = items.map(i => {
+    const chg = rowValue(i, "chg24");
+    return `<tr data-s="${esc(i.symbol)}" class="${i.symbol === state.selected ? "sel" : ""}">
+      <td><b>${esc(i.base)}</b></td>
+      <td data-f="price">${fmtPrice(rowValue(i, "price"))}</td>
+      <td data-f="chg" class="${cls(chg)}">${fmtPct(chg)}</td>
+      <td data-f="vol" class="hide-sm">${fmtUsd(rowValue(i, "vol24"))}</td>
+      <td><span class="badge b-${i.level}">${esc(i.label)}</span> <span class="muted">${i.score > 0 ? "+" : ""}${i.score}</span></td>
+      <td class="hide-sm">${i.rsi == null ? "-" : i.rsi.toFixed(0)}</td>
+      <td class="hide-sm">${i.pct_rank_5y == null ? "-" : "%" + (i.pct_rank_5y * 100).toFixed(0)}</td>
+      <td class="hide-sm ${cls(i.bt_return)}">${fmtPct(i.bt_return)}</td></tr>`;
+  }).join("") || `<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">Henüz veri yok — ilk açılışta 5 yıllık veriler indiriliyor.</td></tr>`;
+  tbody.querySelectorAll("tr[data-s]").forEach(tr => state.rowEls[tr.dataset.s] = tr);
+}
+
+/* ---------------- Anlık fiyat akışı (tüm coinler, saniyede bir) ---------------- */
+function connectMarket(attempt = 0) {
+  const ws = new WebSocket(`${WS_BASES[attempt % WS_BASES.length]}/ws/!miniTicker@arr`);
+  ws.onopen = () => setConn(true);
+  ws.onmessage = ev => onTickers(JSON.parse(ev.data));
+  ws.onclose = () => { setConn(false); setTimeout(() => connectMarket(attempt + 1), Math.min(30e3, 2000 * (attempt + 1))); };
+}
+
+function setConn(on) {
+  $("#connDot").classList.toggle("on", on);
+  $("#connText").textContent = on ? "Canlı" : "Bağlantı yok, yeniden deneniyor…";
+}
+
+function onTickers(list) {
+  const now = Date.now();
+  for (const t of list) {
+    if (!state.bySym[t.s]) continue;
+    const prev = state.live[t.s];
+    const tick = {c: +t.c, o: +t.o, h: +t.h, l: +t.l, q: +t.q};
+    state.live[t.s] = tick;
+    trackMove(t.s, tick.c, now);
+    const tr = state.rowEls[t.s];
+    if (tr) {
+      const pc = tr.querySelector('[data-f="price"]');
+      pc.textContent = fmtPrice(tick.c);
+      if (prev && prev.c !== tick.c) {
+        pc.classList.remove("flash-up", "flash-down"); void pc.offsetWidth;
+        pc.classList.add(tick.c > prev.c ? "flash-up" : "flash-down");
+      }
+      const chg = tick.c / tick.o - 1, cc = tr.querySelector('[data-f="chg"]');
+      cc.textContent = fmtPct(chg); cc.className = cls(chg);
+      tr.querySelector('[data-f="vol"]').textContent = fmtUsd(tick.q);
+    }
+    if (t.s === state.selected) renderHeadPrice();
+  }
+}
+
+/* ---------------- Hızlı hareket uyarıları ---------------- */
+function trackMove(sym, price, now) {
+  const h = state.hist[sym] || (state.hist[sym] = []);
+  if (!h.length || now - h[h.length - 1][0] >= 5000) h.push([now, price]);
+  while (h.length && now - h[0][0] > MOVE_WINDOW_MS) h.shift();
+  if (h.length < 2) return;
+  const chg = price / h[0][1] - 1;
+  if (Math.abs(chg) * 100 < MOVE_THRESHOLD || now - (state.lastMove[sym] || 0) < MOVE_COOLDOWN_MS) return;
+  state.lastMove[sym] = now;
+  const base = state.bySym[sym].base;
+  const mins = Math.max(1, Math.round((now - h[0][0]) / 60e3));
+  state.moves.unshift({sym, base, chg, price, at: new Date(now), mins});
+  state.moves = state.moves.slice(0, 30);
+  renderMoves();
+  if ("Notification" in window && Notification.permission === "granted") {
+    new Notification(`${base} ${chg > 0 ? "▲" : "▼"} ${fmtPct(chg)}`, {body: `${mins} dk içinde · fiyat ${fmtPrice(price)} USDT`, tag: sym});
+  }
+}
+
+function renderMoves() {
+  $("#movesCard").style.display = state.moves.length ? "" : "none";
+  $("#moves").innerHTML = state.moves.map(m =>
+    `<div class="move" data-s="${esc(m.sym)}"><b>${esc(m.base)}</b> <span class="${cls(m.chg)}">${m.chg > 0 ? "▲" : "▼"} ${fmtPct(m.chg)}</span>
+     <span class="muted">${m.mins} dk · ${m.at.toLocaleTimeString("tr-TR", {hour: "2-digit", minute: "2-digit"})}</span></div>`).join("");
+}
+
+/* ---------------- Ayrıntı paneli ---------------- */
+let chart, candleS, volS, sma50S, sma200S, bbUS, bbLS, klineWs;
+
+function ensureChart() {
+  if (chart || !window.LightweightCharts) return !!chart;
+  const el = $("#chart");
+  chart = LightweightCharts.createChart(el, {
+    autoSize: true,
+    layout: {background: {color: "transparent"}, textColor: cssVar("--muted"), fontSize: 11},
+    grid: {vertLines: {color: cssVar("--chart-grid")}, horzLines: {color: cssVar("--chart-grid")}},
+    rightPriceScale: {borderColor: cssVar("--line")},
+    timeScale: {borderColor: cssVar("--line"), timeVisible: true, secondsVisible: false},
+    crosshair: {mode: 0},
+    localization: {locale: "tr-TR"},
+  });
+  const up = cssVar("--up"), down = cssVar("--down");
+  candleS = chart.addCandlestickSeries({upColor: up, downColor: down, wickUpColor: up, wickDownColor: down, borderVisible: false});
+  volS = chart.addHistogramSeries({priceFormat: {type: "volume"}, priceScaleId: "vol", lastValueVisible: false, priceLineVisible: false});
+  chart.priceScale("vol").applyOptions({scaleMargins: {top: 0.82, bottom: 0}});
+  const line = (color, style = 0) => chart.addLineSeries({color, lineWidth: 1, lineStyle: style, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false});
+  sma50S = line(cssVar("--sma50")); sma200S = line(cssVar("--sma200"));
+  bbUS = line(cssVar("--bb"), 2); bbLS = line(cssVar("--bb"), 2);
+  return true;
+}
+
+function chartMsg(text) {
+  const m = $("#chartMsg");
+  m.style.display = text ? "flex" : "none";
+  m.textContent = text || "";
+}
+
+function volBar(c) {
+  return {time: c.time, value: c.volume, color: c.close >= c.open ? cssVar("--up-bg") : cssVar("--down-bg")};
+}
+
+function precisionFor(p) {
+  const precision = p >= 100 ? 2 : p >= 1 ? 4 : p >= 0.01 ? 6 : 8;
+  return {type: "price", precision, minMove: Math.pow(10, -precision)};
+}
+
+async function loadChart() {
+  const sym = state.selected, iv = state.interval;
+  document.querySelectorAll("#intervals [data-iv]").forEach(b => b.classList.toggle("active", b.dataset.iv === iv));
+  if (!ensureChart()) { chartMsg("Grafik kütüphanesi yüklenemedi."); return; }
+  chartMsg("Grafik yükleniyor…");
+  let d;
+  try {
+    const r = await fetch(`/api/klines?symbol=${sym}&interval=${iv}`);
+    d = await r.json();
+    if (!r.ok) throw new Error(d.error || r.status);
+  } catch (e) {
+    if (sym === state.selected) chartMsg("Grafik verisi alınamadı: " + e.message);
+    return;
+  }
+  if (sym !== state.selected || iv !== state.interval) return;
+  if (!d.candles.length) { chartMsg("Bu zaman dilimi için veri yok."); return; }
+  chartMsg("");
+  candleS.applyOptions({priceFormat: precisionFor(d.candles[d.candles.length - 1].close)});
+  candleS.setData(d.candles);
+  volS.setData(d.candles.map(volBar));
+  sma50S.setData(d.sma50); sma200S.setData(d.sma200);
+  const bb = $("#showBB").checked;
+  bbUS.setData(bb ? d.bb_upper : []); bbLS.setData(bb ? d.bb_lower : []);
+  const n = d.candles.length;
+  chart.timeScale().setVisibleLogicalRange({from: Math.max(0, n - 150), to: n + 3});
+  connectKline(sym, iv);
+}
+
+function connectKline(sym, iv, attempt = 0) {
+  if (klineWs) { klineWs.onclose = null; klineWs.close(); }
+  const ws = new WebSocket(`${WS_BASES[attempt % WS_BASES.length]}/ws/${sym.toLowerCase()}@kline_${iv}`);
+  klineWs = ws;
+  ws.onmessage = ev => {
+    const k = JSON.parse(ev.data).k;
+    if (!k || sym !== state.selected || iv !== state.interval) return;
+    const bar = {time: k.t / 1000, open: +k.o, high: +k.h, low: +k.l, close: +k.c, volume: +k.v};
+    try { candleS.update(bar); volS.update(volBar(bar)); } catch (e) { /* eski mum, yoksay */ }
+    $("#lastTick").textContent = "Son işlem: " + new Date().toLocaleTimeString("tr-TR");
+  };
+  ws.onclose = () => {
+    if (klineWs === ws && sym === state.selected) setTimeout(() => connectKline(sym, iv, attempt + 1), 3000);
+  };
+}
+
+function renderHeadPrice() {
+  const item = state.bySym[state.selected], live = state.live[state.selected];
+  const price = live ? live.c : item ? item.price : null;
+  $("#dPx").textContent = fmtPrice(price) + " $";
+  const chg = live ? live.c / live.o - 1 : null;
+  $("#dChg").innerHTML = chg == null ? "" : `<span class="${cls(chg)}">${fmtPct(chg)} (24s)</span>`;
+}
+
+function selectCoin(sym) {
+  state.selected = sym;
+  document.querySelectorAll("#rows tr").forEach(tr => tr.classList.toggle("sel", tr.dataset.s === sym));
+  $("#main").classList.add("has-detail");
+  $("#detail").style.display = "";
+  const item = state.bySym[sym];
+  $("#dSym").textContent = item ? item.base + " / USDT" : sym;
+  $("#dBadge").innerHTML = item ? `<span class="badge b-${item.level}">${esc(item.label)} ${item.score > 0 ? "+" : ""}${item.score}</span>` : "";
+  renderHeadPrice();
+  $("#detailBody").innerHTML = `<p class="muted">Ayrıntılar yükleniyor…</p>`;
+  if (chart) { candleS.setData([]); volS.setData([]); }
+  loadChart();
+  loadDetail();
+  if (window.innerWidth < 1200) $("#detail").scrollIntoView({behavior: "smooth"});
+  try { history.replaceState(null, "", "#" + sym); } catch (e) {}
+}
+
+async function loadDetail() {
+  clearTimeout(state.detailTimer);
+  const sym = state.selected;
+  if (!sym) return;
+  try {
+    const r = await fetch(`/api/coin?symbol=${sym}`);
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || r.status);
+    if (sym === state.selected) renderDetail(d);
+  } catch (e) {
+    if (sym === state.selected) $("#detailBody").innerHTML = `<p class="err">Ayrıntılar alınamadı: ${esc(e.message)}</p>`;
+  }
+  if (sym === state.selected) state.detailTimer = setTimeout(loadDetail, 30e3);
+}
+
+function kv(rows) {
+  return `<div class="kv">${rows.map(([k, v]) => `<span class="muted">${k}</span><span>${v}</span>`).join("")}</div>`;
+}
+
+function renderDetail(d) {
+  const s = d.signal, bt = d.backtest, ob = d.orderbook, tk = d.ticker;
+  const parts = [];
+
+  // Zaman dilimleri
+  parts.push(`<section class="card"><h2>Zaman dilimlerine göre sinyal</h2><div class="tf">${d.timeframes.map(t => `
+    <div><b>${esc(t.label)}</b><span class="badge b-${t.level}">${esc(t.level_label)}</span>
+    <div class="muted" style="margin-top:4px">puan ${t.score > 0 ? "+" : ""}${t.score} · RSI ${t.rsi == null ? "-" : t.rsi.toFixed(0)}</div>
+    ${t.trend ? `<div class="${t.trend === "up" ? "up" : "down"}">${t.trend === "up" ? "▲ trend yukarı" : "▼ trend aşağı"}</div>` : ""}</div>`).join("")}</div>
+    <p class="muted" style="margin:8px 0 0">Kısa vadeli (15 dk–4 sa) sinyaller daha sık değişir; günlük sinyal 5 yıllık veriye dayanır.</p></section>`);
+
+  const grid = [];
+  if (s) {
+    const h = s.history || {};
+    let hist = "";
+    if (h.count) hist = `<p>Son 5 yılda bu sinyal <b>${h.count} gün</b> görüldü → ${h.horizon} gün sonra ort. <b class="${cls(h.avg_return)}">${fmtPct(h.avg_return)}</b>, yükselme oranı <b>%${(h.win_rate * 100).toFixed(0)}</b>` +
+      (h.baseline && h.baseline.count ? ` <span class="muted">(tüm günler: ${fmtPct(h.baseline.avg_return)})</span>` : "") + `</p>`;
+    const risk = s.stop_loss ? kv([["Zarar-durdur (≈2×ATR)", fmtPrice(s.stop_loss)], ["Kâr-al (≈3×ATR)", fmtPrice(s.take_profit)]]) : "";
+    grid.push(`<section class="card"><h2>Neden ${esc(s.label)}?</h2><ul class="reasons">${s.reasons.map(r => `<li>${esc(r)}</li>`).join("")}</ul>${hist}${risk}</section>`);
+  }
+  if (tk && tk.price) grid.push(`<section class="card"><h2>Son 24 saat</h2>${kv([
+    ["Değişim", `<span class="${cls(tk.change_pct)}">${fmtPct(tk.change_pct)}</span>`],
+    ["En yüksek", fmtPrice(tk.high)], ["En düşük", fmtPrice(tk.low)],
+    ["Ortalama (VWAP)", fmtPrice(tk.vwap)], ["İşlem hacmi", fmtUsd(tk.quote_volume)],
+    ["İşlem sayısı", tk.trades.toLocaleString("tr-TR")],
+    ...(s ? [["7 gün", `<span class="${cls(s.change_7d)}">${fmtPct(s.change_7d)}</span>`], ["30 gün", `<span class="${cls(s.change_30d)}">${fmtPct(s.change_30d)}</span>`],
+             ["5 yıllık zirveden", `<span class="down">${fmtPct(s.drawdown_5y)}</span>`],
+             ["5 yıllık konum", s.pct_rank_5y == null ? "-" : "%" + (s.pct_rank_5y * 100).toFixed(0)]] : [])])}</section>`);
+  if (ob && ob.best_bid) grid.push(`<section class="card"><h2>Emir defteri (±%${(ob.band * 100).toFixed(0)})</h2>
+    <div style="display:flex;justify-content:space-between"><span class="up">Alıcı ${fmtUsd(ob.bid_usd)}</span><b>${esc(ob.verdict)}</b><span class="down">Satıcı ${fmtUsd(ob.ask_usd)}</span></div>
+    <div class="bar"><div style="width:${(ob.imbalance * 100).toFixed(1)}%"></div></div>
+    ${kv([["En iyi alış / satış", `${fmtPrice(ob.best_bid)} / ${fmtPrice(ob.best_ask)}`], ["Makas", (ob.spread_pct * 100).toFixed(3) + "%"],
+          ["En büyük alış duvarı", ob.bid_wall ? `${fmtPrice(ob.bid_wall.price)} (${fmtUsd(ob.bid_wall.usd)})` : "-"],
+          ["En büyük satış duvarı", ob.ask_wall ? `${fmtPrice(ob.ask_wall.price)} (${fmtUsd(ob.ask_wall.usd)})` : "-"]])}</section>`);
+  if (bt) grid.push(`<section class="card"><h2>5 yıllık strateji testi</h2>${kv([
+    ["Dönem", `${bt.start.slice(0, 10)} → ${bt.end.slice(0, 10)}`],
+    ["Strateji getirisi", `<span class="${cls(bt.total_return)}">${fmtPct(bt.total_return)}</span>`],
+    ["Al-tut getirisi", `<span class="${cls(bt.buy_hold_return)}">${fmtPct(bt.buy_hold_return)}</span>`],
+    ["En büyük düşüş (strateji / al-tut)", `${fmtPct(bt.max_drawdown)} / ${fmtPct(bt.buy_hold_max_drawdown)}`],
+    ["İşlem sayısı", bt.trades], ["Başarı oranı", bt.win_rate == null ? "-" : "%" + (bt.win_rate * 100).toFixed(0)],
+    ["Piyasada kalma", "%" + (bt.exposure * 100).toFixed(0)]])}</section>`);
+  if (d.quotes.length) {
+    const best = d.quotes[0];
+    grid.push(`<section class="card"><h2>Nereden alınır?</h2><div style="overflow-x:auto"><table><thead><tr><th>Borsa</th><th>Fiyat</th><th class="hide-sm">Komisyon</th><th>Alış maliyeti</th><th></th></tr></thead><tbody>
+      ${d.quotes.map(q => `<tr><td>${q === best ? "⭐ " : ""}<b>${esc(q.exchange)}</b> <span class="muted">${esc(q.pair)}</span></td><td>${fmtPrice(q.price)}</td>
+        <td class="hide-sm">%${(q.fee * 100).toFixed(2)}</td><td>${fmtPrice(q.effective_buy)}</td><td><a href="${esc(q.url)}" target="_blank" rel="noopener">İşlem →</a></td></tr>`).join("")}
+      </tbody></table></div><p class="muted" style="margin:6px 0 0">Komisyonlar yaklaşık değerlerdir; USD ve USDT eşdeğer kabul edilir.</p></section>`);
+  }
+  parts.push(`<div class="grid2">${grid.join("")}</div>`);
+  if (d.errors && d.errors.length) parts.push(`<p class="err">${d.errors.map(esc).join("<br>")}</p>`);
+  $("#detailBody").innerHTML = parts.join("");
+}
+
+/* ---------------- Olaylar ---------------- */
+document.querySelectorAll("[data-filter]").forEach(b => b.onclick = () => {
+  state.filter = b.dataset.filter;
+  document.querySelectorAll("[data-filter]").forEach(x => x.classList.toggle("active", x === b));
+  renderTable();
+});
+$("#search").oninput = e => { state.search = e.target.value; renderTable(); };
+document.querySelectorAll("th[data-sort]").forEach(th => th.onclick = () => {
+  const key = th.dataset.sort;
+  state.sort = {key, dir: state.sort.key === key ? -state.sort.dir : (key === "symbol" ? 1 : -1)};
+  renderTable();
+});
+$("#rows").onclick = e => { const tr = e.target.closest("tr[data-s]"); if (tr) selectCoin(tr.dataset.s); };
+$("#moves").onclick = e => { const m = e.target.closest("[data-s]"); if (m) selectCoin(m.dataset.s); };
+$("#intervals").onclick = e => { const b = e.target.closest("[data-iv]"); if (b) { state.interval = b.dataset.iv; loadChart(); } };
+$("#showBB").onchange = () => loadChart();
+$("#closeDetail").onclick = () => {
+  state.selected = null; clearTimeout(state.detailTimer);
+  if (klineWs) { klineWs.onclose = null; klineWs.close(); klineWs = null; }
+  $("#detail").style.display = "none"; $("#main").classList.remove("has-detail");
+  document.querySelectorAll("#rows tr.sel").forEach(tr => tr.classList.remove("sel"));
+};
+$("#notifyBtn").onclick = async () => {
+  if (!("Notification" in window)) { alert("Tarayıcınız bildirimleri desteklemiyor."); return; }
+  const p = await Notification.requestPermission();
+  $("#notifyBtn").textContent = p === "granted" ? "🔔 Bildirimler açık" : "🔕 Bildirim izni yok";
+};
+if ("Notification" in window && Notification.permission === "granted") $("#notifyBtn").textContent = "🔔 Bildirimler açık";
+$("#moveThr").textContent = MOVE_THRESHOLD;
+
+loadSignals().then(() => {
+  const initial = decodeURIComponent(location.hash.slice(1));
+  if (initial) selectCoin(initial);
+});
+connectMarket();
+</script>
+</body>
+</html>

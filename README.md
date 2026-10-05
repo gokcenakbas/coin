@@ -21,6 +21,25 @@ sinyal değiştiğinde **Telegram / Discord / Slack** üzerinden uyarı göndere
 | **Uyarılar** | Sinyal seviyesi değiştiğinde (ör. BEKLE → AL) ve belirlediğiniz fiyat alarmlarında bildirim gönderir. Aynı uyarı tekrar tekrar gelmez. |
 | **HTML rapor** | Tüm coinleri sıralanabilir tek bir tabloda gösterir. |
 
+## Canlı panel (önerilen)
+
+```bash
+python -m cointracker dashboard
+```
+
+Tarayıcıda **http://localhost:8050** otomatik açılır (Mac'te `mac_baslat.command` dosyasına çift tıklamak da aynı işi yapar):
+
+- **Anlık fiyatlar:** Tüm coinlerin fiyatı, 24 saatlik değişimi ve hacmi Binance canlı akışından **her saniye** güncellenir.
+- **Mum grafiği:** 1 dk, 5 dk, 15 dk, 1 sa, 4 sa, 1 gün ve 1 hafta seçenekleriyle. Son mum canlı oluşur; 50/200 ortalama ve Bollinger bantları da gösterilir.
+- **Zaman dilimlerine göre sinyal:** 15 dk / 1 saat / 4 saat / 1 gün için ayrı AL/SAT puanı, RSI ve trend yönü.
+- **Emir defteri:** Fiyatın ±%2'si içindeki alıcı ve satıcı emirleri ile alıcı/satıcı baskısı, makas ve en büyük alış/satış duvarları.
+- **Son 24 saat:** En yüksek ve en düşük fiyat, ortalama fiyat (VWAP), işlem hacmi ve işlem sayısı.
+- **Hızlı hareket uyarısı:** Bir coin 5 dakika içinde %3'ten fazla yükselir veya düşerse panelde görünür. "🔔 Bildirimleri aç" ile masaüstü bildirimi olarak da gelir.
+- Coine tıklayınca gerekçeler, 5 yıllık istatistikler, strateji testi ve hangi borsadan alınacağı da görünür.
+
+Panel yalnızca sizin bilgisayarınızdan erişilebilir; terminal penceresi açık kaldığı sürece çalışır.
+Sinyaller her 15 dakikada bir yeniden hesaplanır (`--refresh 5` ile 5 dakikaya düşürülebilir).
+
 ## Kurulum
 
 ```bash
@@ -140,6 +159,9 @@ cointracker/
   alerts.py      Telegram / webhook / konsol bildirimleri, uyarı durumu
   engine.py      tüm adımları coinler için birlikte çalıştırır
   report.py      HTML rapor
+  live.py        gün içi sinyaller, emir defteri, 24 saatlik özet
+  dashboard.py   canlı panel sunucusu
+  web/           panel arayüzü (index.html) ve grafik kütüphanesi
   cli.py         komut satırı
 tests/           pytest testleri (ağ gerektirmez)
 ```

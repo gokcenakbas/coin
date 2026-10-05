@@ -8,6 +8,7 @@
   python -m cointracker backtest               # stratejinin 5 yıllık geriye dönük testi
   python -m cointracker watch                  # sürekli takip ve uyarı (Telegram/Discord/Slack)
   python -m cointracker report --out rapor.html
+  python -m cointracker dashboard              # tarayıcıda canlı panel
 """
 
 from __future__ import annotations
@@ -213,6 +214,14 @@ def cmd_report(engine: Engine, args) -> int:
     return 0
 
 
+def cmd_dashboard(engine: Engine, args) -> int:
+    from cointracker.dashboard import serve
+
+    serve(engine.cfg, host=args.host, port=args.port, open_browser=not args.no_browser, symbols=args.coins,
+          refresh_minutes=args.refresh, update=not args.no_update)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="cointracker", description="5 yıllık veriye dayalı kripto takip ve uyarı sistemi")
     p.add_argument("-c", "--config", help="ayar dosyası (varsayılan: config.yaml)")
@@ -244,12 +253,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = with_coins(sub.add_parser("report", help="HTML rapor oluştur"))
     sp.add_argument("--out", default="report.html")
+
+    sp = with_coins(sub.add_parser("dashboard", help="tarayıcıda canlı panel (anlık fiyat, grafik, emir defteri)"))
+    sp.add_argument("--port", type=int, default=8050)
+    sp.add_argument("--host", default="127.0.0.1")
+    sp.add_argument("--refresh", type=float, default=15, help="sinyallerin yenilenme aralığı (dakika)")
+    sp.add_argument("--no-browser", action="store_true", help="tarayıcıyı otomatik açma")
     return p
 
 
 COMMANDS = {
     "update": cmd_update, "scan": cmd_scan, "analyze": cmd_analyze, "where": cmd_where,
-    "backtest": cmd_backtest, "watch": cmd_watch, "report": cmd_report,
+    "backtest": cmd_backtest, "watch": cmd_watch, "report": cmd_report, "dashboard": cmd_dashboard,
 }
 
 
