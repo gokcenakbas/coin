@@ -77,6 +77,17 @@ td a,.kv a{color:var(--accent);text-decoration:none}
 .alarm-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .alarm-row input{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:7px;padding:5px 8px;width:140px}
 .alarms{margin:8px 0 0;padding:0;list-style:none}.alarms li{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--line)}
+.plan-head{display:flex;gap:10px;align-items:flex-start;margin-bottom:10px}
+.plan-head p{margin:0;font-size:14px;line-height:1.5}
+.levels{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+.lv{border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.lv span{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+.lv b{font-size:15px;font-variant-numeric:tabular-nums}
+.lv.buy{border-color:var(--up);background:var(--up-bg)}.lv.stop{border-color:var(--down);background:var(--down-bg)}
+.lv.tgt{border-color:var(--accent)}
+.plan-btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.zone-in{color:var(--up);font-weight:600}
+@media (min-width:1200px){main.has-detail .hide-detail{display:none}}
 footer{color:var(--muted);font-size:12px;text-align:center;padding:4px 16px 20px}
 @media (max-width:700px){.hide-sm{display:none}#chart{height:320px}.tf{grid-template-columns:repeat(2,1fr)}input[type=search]{width:120px}}
 </style>
@@ -112,11 +123,13 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:4px 16px 20px
           <th data-sort="symbol">Coin</th>
           <th data-sort="price">Fiyat</th>
           <th data-sort="chg24">24s</th>
-          <th data-sort="vol24" class="hide-sm">24s Hacim</th>
+          <th data-sort="vol24" class="hide-sm hide-detail">24s Hacim</th>
           <th data-sort="score">Sinyal</th>
-          <th data-sort="rsi" class="hide-sm">RSI</th>
-          <th data-sort="pct_rank_5y" class="hide-sm" title="Fiyatın son 5 yıl içindeki konumu (0 = en ucuz)">5y %</th>
-          <th data-sort="bt_return" class="hide-sm" title="Strateji getirisi, son 5 yıl">Strateji 5y</th>
+          <th data-sort="rsi" class="hide-sm hide-detail">RSI</th>
+          <th data-sort="pct_rank_5y" class="hide-sm hide-detail" title="Fiyatın son 5 yıl içindeki konumu (0 = en ucuz)">5y %</th>
+          <th data-sort="buy_dist" class="hide-sm" title="Önerilen alım bölgesi ve şu anki fiyata uzaklığı">Alım bölgesi</th>
+          <th data-sort="tgt_dist" class="hide-sm" title="Hedef 1 (satış) ve şu anki fiyattan uzaklığı">Hedef</th>
+          <th data-sort="bt_return" class="hide-sm hide-detail" title="Strateji getirisi, son 5 yıl">Strateji 5y</th>
         </tr></thead>
         <tbody id="rows"></tbody>
       </table>
@@ -137,12 +150,13 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:4px 16px 20px
       <button data-iv="1m">1dk</button><button data-iv="5m">5dk</button><button data-iv="15m">15dk</button>
       <button data-iv="1h">1sa</button><button data-iv="4h">4sa</button><button data-iv="1d">1g</button><button data-iv="1w">1h</button>
       <span class="spacer"></span>
+      <label class="muted"><input type="checkbox" id="showLevels" checked> Seviyeler</label>
       <label class="muted"><input type="checkbox" id="showBB"> Bollinger</label>
     </div>
     <div id="chart"><div id="chartMsg"></div></div>
-    <div class="legend"><span><i style="background:var(--sma50)"></i>50 ort.</span><span><i style="background:var(--sma200)"></i>200 ort.</span><span id="lastTick"></span></div>
-    <div id="alarmBox"></div>
+    <div class="legend"><span><i style="background:var(--sma50)"></i>50 ort.</span><span><i style="background:var(--sma200)"></i>200 ort.</span><span><i style="background:var(--up)"></i>Alım bölgesi</span><span><i style="background:var(--accent)"></i>Hedef</span><span><i style="background:var(--down)"></i>Zarar-durdur</span><span id="lastTick"></span></div>
     <div id="detailBody"></div>
+    <div id="alarmBox"></div>
   </section>
 </main>
 <div id="toasts"></div>
@@ -175,7 +189,7 @@ const fmtUsd = v => v == null ? "-" : "$" + compact.format(v);
 const state = {
   items: [], bySym: {}, live: {}, filter: "all", search: "", sort: {key: "score", dir: -1},
   selected: null, interval: "1h", rowEls: {}, hist: {}, lastMove: {}, moves: [], detailTimer: null,
-  watch: {favorites: [], alarms: []}, app: false, firedAlarms: new Set(), autoSelected: false,
+  watch: {favorites: [], alarms: []}, app: false, plan: null, firedAlarms: new Set(), autoSelected: false,
 };
 
 /* ---------------- 5 yıllık sinyal listesi ---------------- */
@@ -220,7 +234,30 @@ function rowValue(item, key) {
   if (key === "chg24") return live ? live.c / live.o - 1 : null;
   if (key === "vol24") return live ? live.q : null;
   if (key === "symbol") return item.symbol;
+  if (key === "buy_dist" || key === "tgt_dist") {
+    if (!item.plan) return null;
+    const price = rowValue(item, "price");
+    return key === "buy_dist" ? item.plan.buy_high / price - 1 : item.plan.target1 / price - 1;
+  }
   return item[key];
+}
+
+function livePrice(item) {
+  const live = state.live[item.symbol];
+  return live ? live.c : item.price;
+}
+
+function buyCell(i) {
+  const p = i.plan, price = livePrice(i);
+  if (!p || !price) return "-";
+  if (price >= p.buy_low && price <= p.buy_high * 1.001) return `<span class="zone-in">✓ bölgede</span>`;
+  return `${fmtPrice(p.buy_high)} <span class="muted">${fmtPct(p.buy_high / price - 1)}</span>`;
+}
+
+function tgtCell(i) {
+  const p = i.plan, price = livePrice(i);
+  if (!p || !price) return "-";
+  return `${fmtPrice(p.target1)} <span class="muted">${fmtPct(p.target1 / price - 1)}</span>`;
 }
 
 function renderTable() {
@@ -242,12 +279,14 @@ function renderTable() {
       <td><span class="star ${favs.has(i.symbol) ? "on" : ""}" data-star="${esc(i.symbol)}" title="Takip listesine ekle/çıkar">${favs.has(i.symbol) ? "★" : "☆"}</span><b>${esc(i.base)}</b></td>
       <td data-f="price">${fmtPrice(rowValue(i, "price"))}</td>
       <td data-f="chg" class="${cls(chg)}">${fmtPct(chg)}</td>
-      <td data-f="vol" class="hide-sm">${fmtUsd(rowValue(i, "vol24"))}</td>
+      <td data-f="vol" class="hide-sm hide-detail">${fmtUsd(rowValue(i, "vol24"))}</td>
       <td><span class="badge b-${i.level}">${esc(i.label)}</span> <span class="muted">${i.score == null ? "" : (i.score > 0 ? "+" : "") + i.score}</span></td>
-      <td class="hide-sm">${i.rsi == null ? "-" : i.rsi.toFixed(0)}</td>
-      <td class="hide-sm">${i.pct_rank_5y == null ? "-" : "%" + (i.pct_rank_5y * 100).toFixed(0)}</td>
-      <td class="hide-sm ${cls(i.bt_return)}">${fmtPct(i.bt_return)}</td></tr>`;
-  }).join("") || `<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">${state.filter === "fav" ? "Takip listeniz boş — bir coinin yanındaki ☆ işaretine tıklayın." : state.items.length ? "Bu filtreye uyan coin yok." : "Coin listesi yükleniyor…"}</td></tr>`;
+      <td class="hide-sm hide-detail">${i.rsi == null ? "-" : i.rsi.toFixed(0)}</td>
+      <td class="hide-sm hide-detail">${i.pct_rank_5y == null ? "-" : "%" + (i.pct_rank_5y * 100).toFixed(0)}</td>
+      <td class="hide-sm" data-f="buy">${buyCell(i)}</td>
+      <td class="hide-sm" data-f="tgt">${tgtCell(i)}</td>
+      <td class="hide-sm hide-detail ${cls(i.bt_return)}">${fmtPct(i.bt_return)}</td></tr>`;
+  }).join("") || `<tr><td colspan="10" class="muted" style="text-align:center;padding:24px">${state.filter === "fav" ? "Takip listeniz boş — bir coinin yanındaki ☆ işaretine tıklayın." : state.items.length ? "Bu filtreye uyan coin yok." : "Coin listesi yükleniyor…"}</td></tr>`;
   tbody.querySelectorAll("tr[data-s]").forEach(tr => state.rowEls[tr.dataset.s] = tr);
 }
 
@@ -284,6 +323,11 @@ function onTickers(list) {
       const chg = tick.c / tick.o - 1, cc = tr.querySelector('[data-f="chg"]');
       cc.textContent = fmtPct(chg); cc.className = cls(chg);
       tr.querySelector('[data-f="vol"]').textContent = fmtUsd(tick.q);
+      const item = state.bySym[t.s];
+      if (item.plan) {
+        tr.querySelector('[data-f="buy"]').innerHTML = buyCell(item);
+        tr.querySelector('[data-f="tgt"]').innerHTML = tgtCell(item);
+      }
     }
     if (t.s === state.selected) renderHeadPrice();
   }
@@ -403,6 +447,22 @@ function ensureChart() {
   return true;
 }
 
+let planLines = [];
+function applyPlanLines() {
+  if (!chart) return;
+  planLines.forEach(l => candleS.removePriceLine(l));
+  planLines = [];
+  const p = state.plan;
+  if (!p || p.symbol !== state.selected || !$("#showLevels").checked) return;
+  const line = (price, color, title, style = 2) => planLines.push(candleS.createPriceLine(
+    {price, color, lineWidth: 1, lineStyle: style, axisLabelVisible: true, title}));
+  line(p.buy_high, cssVar("--up"), p.action === "AL" ? "Alım" : "Alım bölgesi");
+  if (Math.abs(p.buy_high - p.buy_low) / p.buy_high > 0.001) line(p.buy_low, cssVar("--up"), "");
+  line(p.target1, cssVar("--accent"), "Hedef 1");
+  line(p.target2, cssVar("--accent"), "Hedef 2", 3);
+  line(p.stop, cssVar("--down"), "Stop");
+}
+
 function chartMsg(text) {
   const m = $("#chartMsg");
   m.style.display = text ? "flex" : "none";
@@ -443,6 +503,7 @@ async function loadChart() {
   bbUS.setData(bb ? d.bb_upper : []); bbLS.setData(bb ? d.bb_lower : []);
   const n = d.candles.length;
   chart.timeScale().setVisibleLogicalRange({from: Math.max(0, n - 150), to: n + 3});
+  applyPlanLines();
   connectKline(sym, iv);
 }
 
@@ -477,6 +538,7 @@ function selectCoin(sym) {
   $("#detail").style.display = "";
   const item = state.bySym[sym];
   $("#dSym").textContent = item ? item.base + " / USDT" : sym;
+  state.plan = null; applyPlanLines();
   renderBadge(); renderFavBtn(); renderAlarms();
   renderHeadPrice();
   $("#detailBody").innerHTML = `<p class="muted">Ayrıntılar yükleniyor…</p>`;
@@ -506,9 +568,43 @@ function kv(rows) {
   return `<div class="kv">${rows.map(([k, v]) => `<span class="muted">${k}</span><span>${v}</span>`).join("")}</div>`;
 }
 
+function renderPlan(s) {
+  const p = s.plan, h = s.history || {};
+  const price = (state.live[state.selected] || {}).c || p.price;
+  const dist = v => `<span class="muted">${fmtPct(v / price - 1)}</span>`;
+  const zone = Math.abs(p.buy_high - p.buy_low) / p.buy_high > 0.001 ? `${fmtPrice(p.buy_low)} – ${fmtPrice(p.buy_high)}` : fmtPrice(p.buy_high);
+  const lvls = (list, word) => list.length ? list.map(l => `${fmtPrice(l.price)} <span class="muted">(${l.touches} kez ${word})</span>`).join("<br>") : "-";
+  const actionLevel = {AL: "BUY", SAT: "SELL", BEKLE: "HOLD"}[p.action];
+  return `<section class="card"><h2>İşlem planı — nereden alınır, nereden satılır?</h2>
+    <div class="plan-head"><span class="badge b-${actionLevel}" style="font-size:14px;padding:3px 12px">${esc(p.action)}</span><p>${esc(p.summary)}</p></div>
+    <div class="levels">
+      <div class="lv buy"><span>Alım bölgesi</span><b>${zone}</b> ${p.in_buy_zone ? `<span class="zone-in" style="text-transform:none">✓ fiyat bölgede</span>` : dist(p.buy_high)}</div>
+      <div class="lv tgt"><span>Hedef 1 (satış)</span><b>${fmtPrice(p.target1)}</b> ${dist(p.target1)}</div>
+      <div class="lv tgt"><span>Hedef 2</span><b>${fmtPrice(p.target2)}</b> ${dist(p.target2)}</div>
+      <div class="lv stop"><span>Zarar-durdur</span><b>${fmtPrice(p.stop)}</b> ${dist(p.stop)}</div>
+      <div class="lv"><span>Risk / ödül</span><b>${p.risk_reward ? "1 : " + p.risk_reward.toFixed(1).replace(".", ",") : "-"}</b></div>
+      ${p.action === "SAT" ? `<div class="lv"><span>Satış aralığı</span><b>${fmtPrice(p.sell_low)} – ${fmtPrice(p.sell_high)}</b></div>` : ""}
+    </div>
+    <div class="grid2" style="margin-top:10px">
+      ${kv([["Destekler (alt)", lvls(p.supports, "dip yapılmış")], ["Dirençler (üst)", lvls(p.resistances, "tepe yapılmış")]])}
+      ${kv([["5 yıllık ucuz bölge", p.cheap_5y ? "≤ " + fmtPrice(p.cheap_5y) : "-"], ["5 yıllık pahalı bölge", p.expensive_5y ? "≥ " + fmtPrice(p.expensive_5y) : "-"],
+            ...(p.hist_avg_price ? [[`Geçmişte bu sinyalden ${h.horizon} gün sonra ort.`, fmtPrice(p.hist_avg_price)]] : [])])}
+    </div>
+    <div class="plan-btns">
+      ${p.in_buy_zone ? "" : `<button data-planalarm="buy">🔔 Alım bölgesine inince haber ver</button>`}
+      <button data-planalarm="t1">🔔 Hedef 1'e çıkınca haber ver</button>
+      <button data-planalarm="stop">🔔 Zarar-durdura inerse haber ver</button>
+    </div>
+    <p class="muted" style="margin:8px 0 0">Seviyeler son 1 yılın (gerekirse 5 yılın) dip/tepe noktalarından ve fiyat oynaklığından (ATR) hesaplanır; grafikte çizgi olarak gösterilir. Kesin değil, yol göstericidir.</p>
+  </section>`;
+}
+
 function renderDetail(d) {
   const s = d.signal, bt = d.backtest, ob = d.orderbook, tk = d.ticker;
   const parts = [];
+  state.plan = s && s.plan ? {...s.plan, symbol: d.symbol} : null;
+  applyPlanLines();
+  if (state.plan) parts.push(renderPlan(s));
 
   // Zaman dilimleri
   parts.push(`<section class="card"><h2>Zaman dilimlerine göre sinyal</h2><div class="tf">${d.timeframes.map(t => `
@@ -523,7 +619,7 @@ function renderDetail(d) {
     let hist = "";
     if (h.count) hist = `<p>Son 5 yılda bu sinyal <b>${h.count} gün</b> görüldü → ${h.horizon} gün sonra ort. <b class="${cls(h.avg_return)}">${fmtPct(h.avg_return)}</b>, yükselme oranı <b>%${(h.win_rate * 100).toFixed(0)}</b>` +
       (h.baseline && h.baseline.count ? ` <span class="muted">(tüm günler: ${fmtPct(h.baseline.avg_return)})</span>` : "") + `</p>`;
-    const risk = s.stop_loss ? kv([["Zarar-durdur (≈2×ATR)", fmtPrice(s.stop_loss)], ["Kâr-al (≈3×ATR)", fmtPrice(s.take_profit)]]) : "";
+    const risk = !s.plan && s.stop_loss ? kv([["Zarar-durdur (≈2×ATR)", fmtPrice(s.stop_loss)], ["Kâr-al (≈3×ATR)", fmtPrice(s.take_profit)]]) : "";
     grid.push(`<section class="card"><h2>Neden ${esc(s.label)}?</h2><ul class="reasons">${s.reasons.map(r => `<li>${esc(r)}</li>`).join("")}</ul>${hist}${risk}</section>`);
   }
   if (tk && tk.price) grid.push(`<section class="card"><h2>Son 24 saat</h2>${kv([
@@ -590,12 +686,28 @@ $("#alarmBox").onclick = e => {
   else if (/^[1-9]\d{0,2}(\.\d{3})+$/.test(raw)) norm = raw.replace(/\./g, "");
   const price = parseFloat(norm);
   if (!(price > 0)) { toast("Geçersiz fiyat", "Lütfen bir fiyat yazın, ör. 65000 veya 0,52"); return; }
-  const live = state.live[state.selected], kind = btn.dataset.kind;
+  addAlarm(btn.dataset.kind, price);
+};
+
+function addAlarm(kind, price) {
+  const live = state.live[state.selected];
   if (live && ((kind === "above" && live.c >= price) || (kind === "below" && live.c <= price))) {
     toast("Alarm kurulmadı", `Fiyat zaten ${fmtPrice(live.c)}; seviye ${kind === "above" ? "üstünde" : "altında"}.`); return;
   }
-  watchAction({action: "add_alarm", symbol: state.selected, kind, price}).catch(err => toast("Hata", err.message));
+  watchAction({action: "add_alarm", symbol: state.selected, kind, price})
+    .then(() => toast("Alarm kuruldu", `${(state.bySym[state.selected] || {}).base || ""} ${kind === "above" ? "▲" : "▼"} ${fmtPrice(price)}`))
+    .catch(err => toast("Hata", err.message));
+}
+
+$("#detailBody").onclick = e => {
+  const b = e.target.closest("[data-planalarm]");
+  if (!b || !state.plan) return;
+  const p = state.plan, which = b.dataset.planalarm;
+  if (which === "buy") addAlarm("below", p.buy_high);
+  else if (which === "t1") addAlarm("above", p.target1);
+  else if (which === "stop") addAlarm("below", p.stop);
 };
+$("#showLevels").onchange = () => applyPlanLines();
 $("#moves").onclick = e => { const m = e.target.closest("[data-s]"); if (m) selectCoin(m.dataset.s); };
 $("#intervals").onclick = e => { const b = e.target.closest("[data-iv]"); if (b) { state.interval = b.dataset.iv; loadChart(); } };
 $("#showBB").onchange = () => loadChart();

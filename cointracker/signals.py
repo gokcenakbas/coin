@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 
 from cointracker.indicators import add_indicators
+from cointracker.levels import trade_plan
 
 LEVELS = ["STRONG_SELL", "SELL", "HOLD", "BUY", "STRONG_BUY"]
 LABELS_TR = {
@@ -101,6 +102,7 @@ class Signal:
     stop_loss: float | None = None
     take_profit: float | None = None
     history: dict = field(default_factory=dict)
+    plan: dict | None = None
 
     @property
     def label(self) -> str:
@@ -211,10 +213,16 @@ def analyze(symbol: str, df: pd.DataFrame, cfg: dict, scored: pd.DataFrame | Non
         change_30d=_pct_change(scored["close"], 30),
     )
 
-    atr_value = _num(last["atr"])
-    if atr_value:
-        signal.stop_loss = signal.price - risk["stop_atr_mult"] * atr_value
-        signal.take_profit = signal.price + risk["take_profit_atr_mult"] * atr_value
+    # Alım bölgesi, hedefler ve zarar-durdur (destek/direnç seviyelerinden)
+    signal.plan = trade_plan(scored, cfg)
+    if signal.plan:
+        signal.stop_loss = signal.plan["stop"]
+        signal.take_profit = signal.plan["target1"]
+    else:
+        atr_value = _num(last["atr"])
+        if atr_value:
+            signal.stop_loss = signal.price - risk["stop_atr_mult"] * atr_value
+            signal.take_profit = signal.price + risk["take_profit_atr_mult"] * atr_value
 
     # Geçmiş 5 yılda benzer sinyal oluştuğunda ne oldu?
     window = scored.loc[scored.index >= scored.index[-1] - pd.Timedelta(days=1826)]
@@ -227,4 +235,7 @@ def analyze(symbol: str, df: pd.DataFrame, cfg: dict, scored: pd.DataFrame | Non
     signal.history = forward_return_stats(window["close"], mask, horizon)
     signal.history["horizon"] = horizon
     signal.history["baseline"] = forward_return_stats(window["close"], pd.Series(True, index=window.index), horizon)
+    if signal.plan and signal.history.get("count"):
+        # 5 yıllık geçmişte bu sinyalden `horizon` gün sonra ortalama nerede olunduğu (tahmin değil, ortalama)
+        signal.plan["hist_avg_price"] = signal.price * (1 + signal.history["avg_return"])
     return signal

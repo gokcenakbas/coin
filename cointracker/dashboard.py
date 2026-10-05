@@ -104,10 +104,14 @@ class WatchStore:
                 price = float(body["price"])
                 if kind not in ("above", "below") or not math.isfinite(price) or price <= 0:
                     raise ValueError("geçersiz alarm")
-                self.data["alarms"].append({
-                    "id": uuid.uuid4().hex[:12], "symbol": normalize_symbol(str(body["symbol"]), quote),
-                    "kind": kind, "price": price, "created": datetime.now(timezone.utc).isoformat(),
-                })
+                sym = normalize_symbol(str(body["symbol"]), quote)
+                duplicate = any(a["symbol"] == sym and a["kind"] == kind and math.isclose(a["price"], price)
+                                for a in self.data["alarms"])
+                if not duplicate:
+                    self.data["alarms"].append({
+                        "id": uuid.uuid4().hex[:12], "symbol": sym, "kind": kind, "price": price,
+                        "created": datetime.now(timezone.utc).isoformat(),
+                    })
             elif action == "remove_alarm":
                 self.data["alarms"] = [a for a in self.data["alarms"] if a["id"] != body.get("id")]
             else:
@@ -227,6 +231,8 @@ class DashboardApp:
             "bt_return": bt.total_return if bt else None,
             "bh_return": bt.buy_hold_return if bt else None,
             "win_rate": bt.win_rate if bt else None,
+            "plan": {k: s.plan[k] for k in ("action", "buy_low", "buy_high", "target1", "stop", "in_buy_zone")}
+            if s.plan else None,
         }
 
     def signals_payload(self) -> dict:

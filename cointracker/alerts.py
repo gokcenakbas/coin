@@ -107,7 +107,16 @@ def format_signal(sig: Signal, quotes: list[Quote] | None = None, detailed: bool
                 f"ort. {fmt_pct(h['avg_return'])}, yükselme oranı %{h['win_rate'] * 100:.0f}"
                 + (f" (tüm günlerin ortalaması {fmt_pct(base.get('avg_return'))})" if base.get("count") else "")
             )
-        if sig.is_buy and sig.stop_loss:
+        plan = sig.plan
+        if plan:
+            rr = f" | risk/ödül 1:{plan['risk_reward']:.1f}" if plan.get("risk_reward") else ""
+            lines += [
+                f"📍 Plan ({plan['action']}): {plan['summary']}",
+                f"   Alım bölgesi {fmt_price(plan['buy_low'])}–{fmt_price(plan['buy_high'])} | "
+                f"Hedef 1 {fmt_price(plan['target1'])} | Hedef 2 {fmt_price(plan['target2'])} | "
+                f"Zarar-durdur {fmt_price(plan['stop'])}{rr}",
+            ]
+        elif sig.is_buy and sig.stop_loss:
             lines.append(f"Öneri: zarar-durdur ≈ {fmt_price(sig.stop_loss)}, kâr-al ≈ {fmt_price(sig.take_profit)}")
     if quotes:
         if sig.is_sell:

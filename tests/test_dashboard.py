@@ -91,6 +91,8 @@ def test_watchlist_and_alarms_persist(app, cfg):
     assert data["favorites"] == ["AAAUSDT"]
     alarm = data["alarms"][0]
     assert alarm["symbol"] == "AAAUSDT" and alarm["price"] == 123.5
+    again = app.watch.apply({"action": "add_alarm", "symbol": "AAA", "kind": "above", "price": 123.5}, "USDT")
+    assert len(again["alarms"]) == 1  # aynı alarm iki kez eklenmez
     reloaded = DashboardApp(cfg, engine=app.engine, symbols=["AAA"]).watch.snapshot()
     assert reloaded == data
     assert app.watch.apply({"action": "remove_alarm", "id": alarm["id"]}, "USDT")["alarms"] == []

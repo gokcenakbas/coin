@@ -27,6 +27,13 @@ Coin Takip kendi penceresinde açılan bir Mac uygulamasıdır; tarayıcı veya 
 
 - **Açılışta her şey güncel:** Tüm coinler listede hemen görünür ve fiyatları canlı akar. 5 yıllık analizler coin coin hazırlanıp listeye eklenir.
 - **Coin coin takip:** Herhangi bir coinin yanındaki ☆ işaretine tıklayınca coin **⭐ Takip listem** sekmesine eklenir. Takip listenizdeki bir coinin sinyali değişince (ör. BEKLE → AL) **Mac bildirimi** gelir.
+- **İşlem planı (nereden al, nereden sat):** Her coin için şu seviyeler hesaplanır ve grafikte çizgi olarak gösterilir:
+  - **Alım bölgesi:** AL sinyalinde şu anki fiyat ile en yakın destek arası; diğer durumlarda fiyatın inmesi beklenen destek aralığı.
+  - **Hedef 1 / Hedef 2 (satış):** Üstteki ilk iki direnç.
+  - **Zarar-durdur:** Desteğin 1 ATR altı.
+  - **Risk/ödül oranı**, son 1 yılın destek ve dirençleri, son 5 yılın ucuz ve pahalı bölgeleri.
+
+  "🔔 Alım bölgesine inince / Hedef 1'e çıkınca / Zarar-durdura inerse haber ver" düğmeleriyle tek tıkla alarm kurulur.
 - **Fiyat alarmı:** Coinin sayfasından "şu fiyatın üstüne çıkınca / altına inince" alarmı kurulur. Alarm çalınca Mac bildirimi gelir.
 - Canlı panelin tüm özellikleri (grafikler, emir defteri, zaman dilimleri, nereden alınır) uygulamada da vardır.
 
