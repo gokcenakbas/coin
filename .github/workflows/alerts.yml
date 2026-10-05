@@ -1,0 +1,45 @@
+# Sunucu gerektirmeden saatlik takip: her saat başı sinyalleri kontrol eder, değişiklik varsa Telegram/Discord'a yazar.
+# Depo ayarlarından (Settings → Secrets and variables → Actions) şu secret'ları ekleyin:
+#   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID   ve/veya   ALERT_WEBHOOK_URL
+name: coin-alerts
+
+on:
+  schedule:
+    - cron: "7 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: coin-alerts
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+
+      # Fiyat verisi ve "son gönderilen uyarılar" durumu çalıştırmalar arasında korunur
+      - uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: coin-data-${{ github.run_id }}
+          restore-keys: coin-data-
+
+      - name: Sinyalleri kontrol et ve uyarı gönder
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
+        run: python -m cointracker watch --once
+
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: data
+          key: coin-data-${{ github.run_id }}

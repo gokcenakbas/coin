@@ -1,0 +1,45 @@
+# Bu dosyayı config.yaml olarak kopyalayıp düzenleyin:  cp config.example.yaml config.yaml
+# Belirtmediğiniz ayarlar için varsayılanlar kullanılır (cointracker/config.py).
+
+data_dir: data
+history_years: 5            # analiz ve geriye dönük test penceresi (yıl)
+
+universe:
+  mode: top                 # top = hacme göre ilk N coin | all = Binance'teki tüm USDT pariteleri | list = aşağıdaki liste
+  top_n: 100
+  quote: USDT
+  symbols: [BTC, ETH, SOL, BNB, XRP, AVAX, LINK]   # mode: list iken kullanılır
+  exclude: []               # takip etmek istemediğiniz coinler, ör. [PEPE, SHIB]
+
+signals:
+  strong_buy_threshold: 4   # puan >= 4  -> GÜÇLÜ AL
+  buy_threshold: 2          # puan >= 2  -> AL
+  sell_threshold: -2        # puan <= -2 -> SAT
+  strong_sell_threshold: -4 # puan <= -4 -> GÜÇLÜ SAT
+  rsi_oversold: 30
+  rsi_overbought: 70
+  cheap_percentile: 0.20    # 5 yıllık fiyatların alt %20'si "ucuz"
+  expensive_percentile: 0.90
+  horizon_days: 30          # "sinyalden X gün sonra ne oldu" istatistiği
+
+risk:
+  stop_atr_mult: 2.0        # zarar-durdur = fiyat - 2 x ATR
+  take_profit_atr_mult: 3.0 # kâr-al     = fiyat + 3 x ATR
+
+backtest:
+  fee: 0.001                # işlem başına komisyon (%0.1)
+
+alerts:
+  levels: [STRONG_BUY, BUY, SELL, STRONG_SELL]   # hangi sinyal değişimlerinde uyarı gelsin
+  telegram:
+    enabled: false          # TELEGRAM_BOT_TOKEN ve TELEGRAM_CHAT_ID ortam değişkenleri tanımlıysa otomatik açılır
+  webhook:
+    enabled: false          # Discord/Slack webhook: ALERT_WEBHOOK_URL ortam değişkeni
+  price_alerts:
+    - {coin: BTC, above: 150000}
+    - {coin: ETH, below: 2000}
+
+watch:
+  interval_minutes: 60
+
+exchanges: [binance, okx, bybit, kucoin, gate, coinbase, kraken, btcturk]
