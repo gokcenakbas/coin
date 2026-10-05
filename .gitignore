@@ -12,3 +12,5 @@ dist/
 .build-venv/
 packaging/CoinTakip.icns
 *.dmg
+promo-out/
+tools/promo/node_modules/

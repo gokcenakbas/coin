@@ -63,7 +63,7 @@ tbody tr.sel{background:var(--hover);box-shadow:inset 3px 0 0 var(--accent)}
 .tf{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .tf>div{border:1px solid var(--line);border-radius:8px;padding:8px;text-align:center}
 .tf b{display:block;font-size:12px;color:var(--muted);font-weight:600;margin-bottom:4px}
-.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px}
+.kv{display:grid;grid-template-columns:minmax(120px,1fr) auto;gap:4px 12px}
 .kv span:nth-child(even){text-align:right;font-variant-numeric:tabular-nums}
 ul.reasons{margin:0;padding-left:18px}ul.reasons li{margin:3px 0}
 .bar{height:10px;border-radius:5px;background:var(--down);overflow:hidden;margin:6px 0}
@@ -87,7 +87,11 @@ td a,.kv a{color:var(--accent);text-decoration:none}
 .lv.tgt{border-color:var(--accent)}
 .plan-btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .zone-in{color:var(--up);font-weight:600}
-@media (min-width:1200px){main.has-detail .hide-detail{display:none}}
+@media (min-width:1200px){main.has-detail .hide-detail{display:none}
+  main.has-detail #listCard{position:sticky;top:64px;align-self:start}
+  main.has-detail #listCard .tablewrap{max-height:calc(100vh - 150px)}}
+.kv span:nth-child(even){white-space:nowrap}
+.wide{grid-column:1/-1}
 footer{color:var(--muted);font-size:12px;text-align:center;padding:4px 16px 20px}
 @media (max-width:700px){.hide-sm{display:none}#chart{height:320px}.tf{grid-template-columns:repeat(2,1fr)}input[type=search]{width:120px}}
 </style>
@@ -184,6 +188,7 @@ function fmtPrice(p) {
 }
 const fmtPct = v => v == null || !isFinite(v) ? "-" : (v > 0 ? "+" : "") + (v * 100).toFixed(2).replace(".", ",") + "%";
 const cls = v => v > 0 ? "up" : v < 0 ? "down" : "";
+const trDate = iso => iso ? iso.slice(8, 10) + "." + iso.slice(5, 7) + "." + iso.slice(0, 4) : "-";
 const fmtUsd = v => v == null ? "-" : "$" + compact.format(v);
 
 const state = {
@@ -633,11 +638,11 @@ function renderDetail(d) {
   if (ob && ob.best_bid) grid.push(`<section class="card"><h2>Emir defteri (±%${(ob.band * 100).toFixed(0)})</h2>
     <div style="display:flex;justify-content:space-between"><span class="up">Alıcı ${fmtUsd(ob.bid_usd)}</span><b>${esc(ob.verdict)}</b><span class="down">Satıcı ${fmtUsd(ob.ask_usd)}</span></div>
     <div class="bar"><div style="width:${(ob.imbalance * 100).toFixed(1)}%"></div></div>
-    ${kv([["En iyi alış / satış", `${fmtPrice(ob.best_bid)} / ${fmtPrice(ob.best_ask)}`], ["Makas", (ob.spread_pct * 100).toFixed(3) + "%"],
+    ${kv([["En iyi alış / satış", `${fmtPrice(ob.best_bid)} / ${fmtPrice(ob.best_ask)}`], ["Makas", "%" + (ob.spread_pct * 100).toFixed(3).replace(".", ",")],
           ["En büyük alış duvarı", ob.bid_wall ? `${fmtPrice(ob.bid_wall.price)} (${fmtUsd(ob.bid_wall.usd)})` : "-"],
           ["En büyük satış duvarı", ob.ask_wall ? `${fmtPrice(ob.ask_wall.price)} (${fmtUsd(ob.ask_wall.usd)})` : "-"]])}</section>`);
   if (bt) grid.push(`<section class="card"><h2>5 yıllık strateji testi</h2>${kv([
-    ["Dönem", `${bt.start.slice(0, 10)} → ${bt.end.slice(0, 10)}`],
+    ["Dönem", `${trDate(bt.start)} → ${trDate(bt.end)}`],
     ["Strateji getirisi", `<span class="${cls(bt.total_return)}">${fmtPct(bt.total_return)}</span>`],
     ["Al-tut getirisi", `<span class="${cls(bt.buy_hold_return)}">${fmtPct(bt.buy_hold_return)}</span>`],
     ["En büyük düşüş (strateji / al-tut)", `${fmtPct(bt.max_drawdown)} / ${fmtPct(bt.buy_hold_max_drawdown)}`],
@@ -645,9 +650,9 @@ function renderDetail(d) {
     ["Piyasada kalma", "%" + (bt.exposure * 100).toFixed(0)]])}</section>`);
   if (d.quotes.length) {
     const best = d.quotes[0];
-    grid.push(`<section class="card"><h2>Nereden alınır?</h2><div style="overflow-x:auto"><table><thead><tr><th>Borsa</th><th>Fiyat</th><th class="hide-sm">Komisyon</th><th>Alış maliyeti</th><th></th></tr></thead><tbody>
+    grid.push(`<section class="card wide"><h2>Nereden alınır?</h2><div style="overflow-x:auto"><table><thead><tr><th>Borsa</th><th>Fiyat</th><th class="hide-sm">Komisyon</th><th>Alış maliyeti</th><th></th></tr></thead><tbody>
       ${d.quotes.map(q => `<tr><td>${q === best ? "⭐ " : ""}<b>${esc(q.exchange)}</b> <span class="muted">${esc(q.pair)}</span></td><td>${fmtPrice(q.price)}</td>
-        <td class="hide-sm">%${(q.fee * 100).toFixed(2)}</td><td>${fmtPrice(q.effective_buy)}</td><td><a href="${esc(q.url)}" target="_blank" rel="noopener">İşlem →</a></td></tr>`).join("")}
+        <td class="hide-sm">%${(q.fee * 100).toFixed(2).replace(".", ",")}</td><td>${fmtPrice(q.effective_buy)}</td><td><a href="${esc(q.url)}" target="_blank" rel="noopener">İşlem →</a></td></tr>`).join("")}
       </tbody></table></div><p class="muted" style="margin:6px 0 0">Komisyonlar yaklaşık değerlerdir; USD ve USDT eşdeğer kabul edilir.</p></section>`);
   }
   parts.push(`<div class="grid2">${grid.join("")}</div>`);

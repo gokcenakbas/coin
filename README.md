@@ -203,6 +203,18 @@ tests/           pytest testleri (ağ gerektirmez)
 packaging/       uygulama paketleme (PyInstaller), simge, derleme betiği
 ```
 
+## Tanıtım videosu
+
+`tools/promo/` klasörü, uygulamanın tanıtım videosunu demo verisiyle baştan üretir.
+Betik tarayıcıyı otomatik yönetir, altyazıları ve Mac pencere çerçevesini ekler.
+Arayüz değiştiğinde videoyu güncellemek için:
+
+```bash
+npm i playwright-core @fontsource/inter        # bir kerelik, tools/promo içinde
+NODE_PATH=tools/promo/node_modules FONT_DIR=tools/promo/node_modules/@fontsource/inter/files \
+  tools/promo/build.sh promo-out               # çıktı: promo-out/CoinTakip-Tanitim.mp4
+```
+
 ## Testler
 
 ```bash
