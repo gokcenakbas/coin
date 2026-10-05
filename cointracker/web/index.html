@@ -92,6 +92,14 @@ td a,.kv a{color:var(--accent);text-decoration:none}
   main.has-detail #listCard .tablewrap{max-height:calc(100vh - 150px)}}
 .kv span:nth-child(even){white-space:nowrap}
 .wide{grid-column:1/-1}
+#pos{margin-top:12px;border-top:1px solid var(--line);padding-top:12px}
+#pos .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:10px}
+#pos input{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:7px;padding:5px 8px;width:120px}
+.lev{width:100%;border-collapse:collapse;margin-top:8px}
+.lev td,.lev th{padding:4px 8px;text-align:right;border-bottom:1px solid var(--line)}
+.lev td:first-child,.lev th:first-child{text-align:left}
+.lev tr.rec td{background:var(--up-bg);font-weight:600}
+.ok{color:var(--up)}.warn{color:var(--warn)}.bad{color:var(--down)}
 footer{color:var(--muted);font-size:12px;text-align:center;padding:4px 16px 20px}
 @media (max-width:700px){.hide-sm{display:none}#chart{height:320px}.tf{grid-template-columns:repeat(2,1fr)}input[type=search]{width:120px}}
 </style>
@@ -334,7 +342,7 @@ function onTickers(list) {
         tr.querySelector('[data-f="tgt"]').innerHTML = tgtCell(item);
       }
     }
-    if (t.s === state.selected) renderHeadPrice();
+    if (t.s === state.selected) { renderHeadPrice(); if (!document.activeElement || !document.activeElement.closest("#pos")) updatePos(); }
   }
 }
 
@@ -595,6 +603,14 @@ function renderPlan(s) {
       ${kv([["5 yıllık ucuz bölge", p.cheap_5y ? "≤ " + fmtPrice(p.cheap_5y) : "-"], ["5 yıllık pahalı bölge", p.expensive_5y ? "≥ " + fmtPrice(p.expensive_5y) : "-"],
             ...(p.hist_avg_price ? [[`Geçmişte bu sinyalden ${h.horizon} gün sonra ort.`, fmtPrice(p.hist_avg_price)]] : [])])}
     </div>
+    <div id="pos">
+      <h2 style="margin-bottom:8px">Ne kadar alınmalı? Kaldıraç önerisi</h2>
+      <div class="row">
+        <label class="muted">Sermaye (USDT) <input id="posCap" type="text" inputmode="decimal" placeholder="ör. 1000" value="${state.watch.settings && state.watch.settings.capital != null ? state.watch.settings.capital : ""}"></label>
+        <label class="muted">İşlem başına risk % <input id="posRisk" type="text" inputmode="decimal" value="${String((state.watch.settings || {}).risk_pct ?? 1).replace(".", ",")}" style="width:70px"></label>
+      </div>
+      <div id="posOut"></div>
+    </div>
     <div class="plan-btns">
       ${p.in_buy_zone ? "" : `<button data-planalarm="buy">🔔 Alım bölgesine inince haber ver</button>`}
       <button data-planalarm="t1">🔔 Hedef 1'e çıkınca haber ver</button>
@@ -602,6 +618,75 @@ function renderPlan(s) {
     </div>
     <p class="muted" style="margin:8px 0 0">Seviyeler son 1 yılın (gerekirse 5 yılın) dip/tepe noktalarından ve fiyat oynaklığından (ATR) hesaplanır; grafikte çizgi olarak gösterilir. Kesin değil, yol göstericidir.</p>
   </section>`;
+}
+
+const MMR = 0.005;            // vadeli işlemlerde yaklaşık bakım teminatı oranı
+const LEVERAGES = [1, 2, 3, 5, 10, 20];
+// Türkçe yazımı da kabul eder: "0,52", "65.000", "65.000,5", "1000"
+const parseNum = v => {
+  const raw = String(v ?? "").trim().replace(/\s/g, "");
+  if (!raw) return null;
+  let norm = raw;
+  if (raw.includes(",")) norm = raw.replace(/\./g, "").replace(",", ".");
+  else if (/^[1-9]\d{0,2}(\.\d{3})+$/.test(raw)) norm = raw.replace(/\./g, "");
+  const n = parseFloat(norm);
+  return isFinite(n) ? n : null;
+};
+
+// Kaldıraçla tasfiye fiyatı (izole marj, yaklaşık): giriş × (1 − 1/k + bakım teminatı)
+const liqPrice = (entry, lev) => lev <= 1 ? null : entry * (1 - 1 / lev + MMR);
+
+function levStatus(entry, stop, lev) {
+  if (lev <= 1) return {cls: "ok", text: "✓ tasfiye yok"};
+  const liq = liqPrice(entry, lev), stopDist = (entry - stop) / entry, liqDist = (entry - liq) / entry;
+  if (liq >= stop) return {cls: "bad", text: "✗ zarar-durdurdan önce tasfiye"};
+  if (liqDist < 2 * stopDist) return {cls: "warn", text: "⚠ tasfiye stop'a yakın"};
+  return {cls: "ok", text: "✓ güvenli"};
+}
+
+function updatePos() {
+  const out = $("#posOut"), p = state.plan;
+  if (!out || !p) return;
+  const live = (state.live[state.selected] || {}).c || p.price;
+  const entry = p.in_buy_zone || p.action === "AL" ? live : p.buy_high;
+  const stop = p.stop, stopDist = (entry - stop) / entry;
+  const capital = parseNum($("#posCap").value), riskPct = parseNum($("#posRisk").value) ?? 1;
+  const base = (state.bySym[state.selected] || {}).base || "";
+  if (!(stopDist > 0)) { out.innerHTML = ""; return; }
+  // Güvenli üst sınır: tasfiye, zarar-durdurdan en az bir stop mesafesi daha uzakta olsun
+  const maxSafe = Math.max(1, Math.min(20, Math.floor(1 / (2 * stopDist + MMR))));
+  let html = `<p class="muted" style="margin:0 0 6px">Giriş ${fmtPrice(entry)} · zarar-durdur ${fmtPrice(stop)} (${fmtPct(-stopDist)}) · güvenli kaldıraç üst sınırı <b>${maxSafe}x</b></p>`;
+  let rec = 1, notional = null;
+  if (capital > 0 && riskPct > 0) {
+    const riskAmt = capital * riskPct / 100;
+    notional = riskAmt / stopDist;
+    const need = Math.ceil(notional / (capital * 0.9));          // sermayenin %90'ını teminat olarak kullanarak
+    rec = Math.min(Math.max(1, need), maxSafe);
+    const fits = notional / rec <= capital;
+    html += kv([
+      ["Riske atılan (stop çalışırsa kayıp)", `<b>${fmtPrice(riskAmt)} USDT</b> (%${String(riskPct).replace(".", ",")})`],
+      ["Alınacak pozisyon büyüklüğü", `<b>${fmtPrice(notional)} USDT</b> ≈ ${fmtPrice(notional / entry)} ${esc(base)}`],
+      ["Önerilen kaldıraç", `<b class="${rec === 1 ? "ok" : "warn"}">${rec}x</b>${rec === 1 ? " (spot alım yeterli)" : ""}`],
+      ["Gereken teminat", `${fmtPrice(notional / rec)} USDT`],
+    ]);
+    if (!fits) html += `<p class="bad" style="margin:6px 0 0">Bu stop mesafesiyle %${riskPct} risk için sermaye yetmiyor; risk oranını düşürün ya da daha yakın bir stop bekleyin.</p>`;
+  } else {
+    html += `<p class="muted" style="margin:4px 0">Sermayenizi yazın; alınacak miktarı ve önerilen kaldıracı hesaplayalım.</p>`;
+  }
+  html += `<table class="lev"><thead><tr><th>Kaldıraç</th><th>Tasfiye fiyatı</th><th>${notional ? "Teminat" : "Tasfiye mesafesi"}</th><th>Durum</th></tr></thead><tbody>${
+    LEVERAGES.map(l => {
+      const st = levStatus(entry, stop, l), liq = liqPrice(entry, l);
+      return `<tr class="${l === rec && notional ? "rec" : ""}"><td>${l}x${l === 1 ? " (spot)" : ""}</td><td>${liq ? fmtPrice(liq) : "-"}</td>
+        <td>${notional ? fmtPrice(notional / l) + " USDT" : liq ? fmtPct(liq / entry - 1) : "-"}</td><td class="${st.cls}">${st.text}</td></tr>`;
+    }).join("")}</tbody></table>
+  <p class="muted" style="margin:8px 0 0">Miktarı bu hesapla belirlerseniz kaldıraç kaybınızı büyütmez; yalnızca bağlanan teminatı azaltır. Kaldıracı artırıp miktarı da büyütmek riski katlar. Vadeli işlemlerde fonlama ücreti ve tasfiye riski vardır; emin değilseniz 1x (spot) kullanın.</p>`;
+  out.innerHTML = html;
+}
+
+function saveSettings() {
+  const capital = parseNum($("#posCap").value), risk = parseNum($("#posRisk").value) ?? 1;
+  if (risk < 0.1 || risk > 10) { toast("Geçersiz risk oranı", "%0,1 ile %10 arasında bir değer girin (önerilen %1)"); return; }
+  watchAction({action: "settings", capital, risk_pct: risk}).catch(err => toast("Hata", err.message));
 }
 
 function renderDetail(d) {
@@ -657,7 +742,17 @@ function renderDetail(d) {
   }
   parts.push(`<div class="grid2">${grid.join("")}</div>`);
   if (d.errors && d.errors.length) parts.push(`<p class="err">${d.errors.map(esc).join("<br>")}</p>`);
+  // Kullanıcı hesaplayıcıya yazıyorsa o bölümü olduğu gibi koru (değer, odak ve imleç yeri)
+  const active = document.activeElement;
+  const typing = active && active.closest("#pos") ? $("#pos") : null;
+  const caret = typing ? [active.selectionStart, active.selectionEnd] : null;
   $("#detailBody").innerHTML = parts.join("");
+  if (typing && $("#pos")) {
+    $("#pos").replaceWith(typing);
+    active.focus();
+    try { active.setSelectionRange(...caret); } catch (e) {}
+  }
+  updatePos();
 }
 
 /* ---------------- Olaylar ---------------- */
@@ -684,12 +779,7 @@ $("#alarmBox").onclick = e => {
   if (del) { watchAction({action: "remove_alarm", id: del.dataset.del}).catch(err => toast("Hata", err.message)); return; }
   const btn = e.target.closest("[data-kind]");
   if (!btn) return;
-  const raw = $("#alarmPrice").value.trim().replace(/\s/g, "");
-  // Türkçe yazımı da kabul et: "0,52", "65.000", "65.000,5"
-  let norm = raw;
-  if (raw.includes(",")) norm = raw.replace(/\./g, "").replace(",", ".");
-  else if (/^[1-9]\d{0,2}(\.\d{3})+$/.test(raw)) norm = raw.replace(/\./g, "");
-  const price = parseFloat(norm);
+  const price = parseNum($("#alarmPrice").value);
   if (!(price > 0)) { toast("Geçersiz fiyat", "Lütfen bir fiyat yazın, ör. 65000 veya 0,52"); return; }
   addAlarm(btn.dataset.kind, price);
 };
@@ -713,6 +803,8 @@ $("#detailBody").onclick = e => {
   else if (which === "stop") addAlarm("below", p.stop);
 };
 $("#showLevels").onchange = () => applyPlanLines();
+$("#detailBody").addEventListener("input", e => { if (e.target.closest("#pos")) updatePos(); });
+$("#detailBody").addEventListener("change", e => { if (e.target.closest("#pos")) saveSettings(); });
 $("#moves").onclick = e => { const m = e.target.closest("[data-s]"); if (m) selectCoin(m.dataset.s); };
 $("#intervals").onclick = e => { const b = e.target.closest("[data-iv]"); if (b) { state.interval = b.dataset.iv; loadChart(); } };
 $("#showBB").onchange = () => loadChart();

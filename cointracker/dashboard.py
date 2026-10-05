@@ -77,7 +77,7 @@ class WatchStore:
     def __init__(self, path: Path):
         self.path = path
         self.lock = threading.Lock()
-        self.data: dict = {"favorites": [], "alarms": []}
+        self.data: dict = {"favorites": [], "alarms": [], "settings": {"capital": None, "risk_pct": 1.0}}
         if path.exists():
             try:
                 self.data.update(json.loads(path.read_text(encoding="utf-8")))
@@ -112,6 +112,13 @@ class WatchStore:
                         "id": uuid.uuid4().hex[:12], "symbol": sym, "kind": kind, "price": price,
                         "created": datetime.now(timezone.utc).isoformat(),
                     })
+            elif action == "settings":
+                capital = body.get("capital")
+                capital = None if capital in (None, "") else float(capital)
+                risk = float(body.get("risk_pct", 1.0))
+                if (capital is not None and (not math.isfinite(capital) or capital < 0)) or not 0.1 <= risk <= 10:
+                    raise ValueError("geçersiz ayar")
+                self.data["settings"] = {"capital": capital, "risk_pct": risk}
             elif action == "remove_alarm":
                 self.data["alarms"] = [a for a in self.data["alarms"] if a["id"] != body.get("id")]
             else:

@@ -74,7 +74,7 @@ def test_signals_payload(app):
     levels = {i["symbol"]: i["level"] for i in payload["items"]}
     assert set(levels) == {"AAAUSDT", "BBBUSDT", "NEWUSDT"}
     assert levels["NEWUSDT"] == "NODATA" and payload["items"][-1]["symbol"] == "NEWUSDT"
-    assert payload["watch"] == {"favorites": [], "alarms": []}
+    assert payload["watch"] == {"favorites": [], "alarms": [], "settings": {"capital": None, "risk_pct": 1.0}}
     json.dumps(payload, allow_nan=False)
 
 
@@ -97,7 +97,11 @@ def test_watchlist_and_alarms_persist(app, cfg):
     assert reloaded == data
     assert app.watch.apply({"action": "remove_alarm", "id": alarm["id"]}, "USDT")["alarms"] == []
     assert app.watch.apply({"action": "toggle", "symbol": "AAAUSDT"}, "USDT")["favorites"] == []
-    for bad in ({"action": "add_alarm", "symbol": "AAA", "kind": "sideways", "price": 1},
+    st = app.watch.apply({"action": "settings", "capital": "2500", "risk_pct": 1.5}, "USDT")["settings"]
+    assert st == {"capital": 2500.0, "risk_pct": 1.5}
+    for bad in ({"action": "settings", "capital": -1, "risk_pct": 1},
+                {"action": "settings", "capital": 100, "risk_pct": 50},
+                {"action": "add_alarm", "symbol": "AAA", "kind": "sideways", "price": 1},
                 {"action": "add_alarm", "symbol": "AAA", "kind": "above", "price": -5},
                 {"action": "nuke"}):
         with pytest.raises(ValueError):
