@@ -85,6 +85,7 @@ def trade_plan(scored: pd.DataFrame, cfg: dict) -> dict | None:
     s = cfg["signals"]
     price = float(last["close"])
     score = int(last["score"])
+    buying = score >= s["buy_threshold"]
     supports, resistances = support_resistance(scored, atr)
 
     s1 = supports[0]["price"] if supports else price - 1.5 * atr
@@ -94,7 +95,7 @@ def trade_plan(scored: pd.DataFrame, cfg: dict) -> dict | None:
     target1 = r_prices[0] if r_prices else price + 2 * atr
     target2 = r_prices[1] if len(r_prices) > 1 else max(target1 + 1.5 * atr, price + 4 * atr)
 
-    if score >= s["buy_threshold"]:
+    if buying:
         buy_high = price
         buy_low = max(s1, price - atr)
     else:
@@ -113,7 +114,7 @@ def trade_plan(scored: pd.DataFrame, cfg: dict) -> dict | None:
     cheap_5y = float(np.quantile(window, s["cheap_percentile"])) if len(window) >= 365 else None
     expensive_5y = float(np.quantile(window, s["expensive_percentile"])) if len(window) >= 365 else None
 
-    if score >= s["buy_threshold"]:
+    if buying:
         action = "AL"
         summary = (f"Şu anki fiyattan veya {_fmt(buy_low)} seviyesine kadar geri çekilmelerde alınabilir. "
                    f"Hedef 1: {_fmt(target1)} ({_pct_str(target1, price)}), "

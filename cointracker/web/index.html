@@ -100,6 +100,11 @@ td a,.kv a{color:var(--accent);text-decoration:none}
 .lev td:first-child,.lev th:first-child{text-align:left}
 .lev tr.rec td{background:var(--up-bg);font-weight:600}
 .ok{color:var(--up)}.warn{color:var(--warn)}.bad{color:var(--down)}
+.pill.up{color:var(--up);background:var(--up-bg)}.pill.down{color:var(--down);background:var(--down-bg)}
+#relCard{grid-column:1/-1;display:none;border-left:4px solid var(--warn)}
+#relCard.good{border-left-color:var(--up)}#relCard.bad{border-left-color:var(--down)}
+#relCard p{margin:4px 0 0}
+.edge{margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--hover)}
 footer{color:var(--muted);font-size:12px;text-align:center;padding:4px 16px 20px}
 @media (max-width:700px){.hide-sm{display:none}#chart{height:320px}.tf{grid-template-columns:repeat(2,1fr)}input[type=search]{width:120px}}
 </style>
@@ -110,6 +115,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:4px 16px 20px
   <span class="pill" title="Binance anlık fiyat akışı"><span id="connDot" class="dot"></span><span id="connText">Bağlanıyor…</span></span>
   <span class="pill" id="dataStatus">Yükleniyor…</span>
   <span class="pill" id="counts"></span>
+  <span class="pill" id="marketPill" style="display:none"></span>
   <span class="spacer"></span>
   <button id="notifyBtn" title="Hızlı fiyat hareketlerinde masaüstü bildirimi">🔔 Bildirimleri aç</button>
 </header>
@@ -119,6 +125,8 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:4px 16px 20px
     <h2>Hızlı hareketler (5 dk içinde ±<span id="moveThr"></span>%)</h2>
     <div id="moves"></div>
   </section>
+
+  <section class="card" id="relCard"><h2>Sinyaller ne kadar güvenilir?</h2><div id="relBody"></div></section>
 
   <section class="card" id="listCard">
     <div class="toolbar">
@@ -218,6 +226,8 @@ async function loadSignals() {
       const b = $("#notifyBtn"); b.textContent = "🔔 Mac bildirimleri açık"; b.disabled = true;
     }
     renderStatus(d.status);
+    renderMarket(d.status.market);
+    renderReliability(d.status.reliability);
     if (state.selected) { renderBadge(); renderFavBtn(); }
     if (d.status.phase !== "ready") delay = 3000;
     renderTable();
@@ -239,6 +249,41 @@ function renderStatus(s) {
   const buys = state.items.filter(i => i.level.endsWith("BUY")).length;
   const sells = state.items.filter(i => i.level.endsWith("SELL")).length;
   $("#counts").innerHTML = `${ready}/${state.items.length} coin · <span class="up">${buys} AL</span> · <span class="down">${sells} SAT</span>`;
+}
+
+const pctInt = v => v == null ? "-" : "%" + Math.round(v * 100);
+
+// AL sonrası yükselme oranı rastgele günden ne kadar farklı? (puan farkı)
+function edgeVerdict(signalRate, randomRate) {
+  const d = (signalRate - randomRate) * 100;
+  if (d >= 5) return {cls: "good", text: "rastgele günden belirgin şekilde daha iyi"};
+  if (d <= -5) return {cls: "bad", text: "rastgele günden daha kötü"};
+  return {cls: "", text: "rastgele günden belirgin bir farkı yok"};
+}
+
+function renderMarket(m) {
+  const pill = $("#marketPill");
+  if (!m) { pill.style.display = "none"; return; }
+  const icon = {up: "🟢", down: "🔴", mixed: "🟡"}[m.regime];
+  pill.style.display = "";
+  pill.className = "pill " + (m.regime === "up" ? "up" : m.regime === "down" ? "down" : "");
+  pill.textContent = `Piyasa: ${icon} ${m.label}`;
+  pill.title = `Bitcoin ${fmtPrice(m.btc_price)} $ · 200 günlük ortalamanın %${(Math.abs(m.btc_vs_sma200) * 100).toFixed(1).replace(".", ",")} ${m.btc_vs_sma200 >= 0 ? "üstünde" : "altında"} · ${trDate(m.since)} tarihinden beri`;
+}
+
+function renderReliability(r) {
+  const card = $("#relCard");
+  if (!r || r.buy_rise == null) { card.style.display = "none"; return; }
+  const buy = edgeVerdict(r.buy_rise, r.all_rise);
+  const sell = r.sell_fall == null ? null : edgeVerdict(r.sell_fall, r.all_fall);
+  const weak = buy.cls !== "good";
+  card.className = "card " + (buy.cls === "good" ? "good" : buy.cls === "bad" ? "bad" : "");
+  card.style.display = "";
+  $("#relBody").innerHTML = `
+    <p>Son 5 yılda bu listedeki ${r.coins} coinde, <b>AL</b> sinyalinden ${r.horizon} gün sonra fiyat <b>${pctInt(r.buy_rise)}</b> oranında yükseldi;
+      herhangi bir günde bu oran <b>${pctInt(r.all_rise)}</b> → <b>${buy.text}</b>.
+      ${sell ? `<b>SAT</b> sinyalinden sonra düşme oranı <b>${pctInt(r.sell_fall)}</b> (herhangi bir günde ${pctInt(r.all_fall)}) → ${sell.text}.` : ""}</p>
+    ${weak ? `<p class="muted">⚠ Bu yüzden sinyalleri tek başına al-sat kararı olarak kullanmayın. Her coinin "Neden?" bölümünde o coine özel geçmiş isabeti görebilirsiniz; işlem yaparsanız zarar-durdur kullanın ve pozisyonu küçük tutun.</p>` : ""}`;
 }
 
 function rowValue(item, key) {
@@ -709,8 +754,22 @@ function renderDetail(d) {
     let hist = "";
     if (h.count) hist = `<p>Son 5 yılda bu sinyal <b>${h.count} gün</b> görüldü → ${h.horizon} gün sonra ort. <b class="${cls(h.avg_return)}">${fmtPct(h.avg_return)}</b>, yükselme oranı <b>%${(h.win_rate * 100).toFixed(0)}</b>` +
       (h.baseline && h.baseline.count ? ` <span class="muted">(tüm günler: ${fmtPct(h.baseline.avg_return)})</span>` : "") + `</p>`;
+    const e = s.edge || {};
+    let edgeHtml = "";
+    if (e.buy && e.buy.count && e.all && e.all.count) {
+      const v = edgeVerdict(e.buy.win_rate, e.all.win_rate);
+      edgeHtml = `<div class="edge"><b>Bu coinde sinyal ne kadar tuttu?</b> AL'dan ${e.horizon} gün sonra yükselme <b>${pctInt(e.buy.win_rate)}</b>
+        (${e.buy.count} gün), herhangi bir günde <b>${pctInt(e.all.win_rate)}</b> → <span class="${v.cls === "good" ? "up" : v.cls === "bad" ? "down" : "warn"}">${v.text}</span>.`;
+      const by = h.by_regime;
+      if (by) {
+        const part = (k, name) => by[k] && by[k].count ? `${name} ${pctInt(by[k].win_rate)} <span class="muted">(${by[k].count} gün)</span>` : null;
+        const parts = [part("up", "piyasa yükselişteyken"), part("mixed", "kararsızken"), part("down", "düşüşteyken")].filter(Boolean);
+        if (parts.length) edgeHtml += `<br><span class="muted">Şu anki sinyalin (${esc(s.label)}) piyasa durumuna göre geçmişi:</span> ${parts.join(" · ")}`;
+      }
+      edgeHtml += `</div>`;
+    }
     const risk = !s.plan && s.stop_loss ? kv([["Zarar-durdur (≈2×ATR)", fmtPrice(s.stop_loss)], ["Kâr-al (≈3×ATR)", fmtPrice(s.take_profit)]]) : "";
-    grid.push(`<section class="card"><h2>Neden ${esc(s.label)}?</h2><ul class="reasons">${s.reasons.map(r => `<li>${esc(r)}</li>`).join("")}</ul>${hist}${risk}</section>`);
+    grid.push(`<section class="card"><h2>Neden ${esc(s.label)}?</h2><ul class="reasons">${s.reasons.map(r => `<li>${esc(r)}</li>`).join("")}</ul>${hist}${edgeHtml}${risk}</section>`);
   }
   if (tk && tk.price) grid.push(`<section class="card"><h2>Son 24 saat</h2>${kv([
     ["Değişim", `<span class="${cls(tk.change_pct)}">${fmtPct(tk.change_pct)}</span>`],

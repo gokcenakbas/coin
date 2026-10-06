@@ -242,6 +242,29 @@ class DashboardApp:
             if s.plan else None,
         }
 
+    @staticmethod
+    def _reliability(results: dict[str, CoinAnalysis]) -> dict | None:
+        """Tüm coinlerde (gün ağırlıklı): AL sonrası yükselme, SAT sonrası düşme ve rastgele gün oranları."""
+        totals = {k: [0, 0.0] for k in ("buy", "sell", "all")}
+        horizon = None
+        for r in results.values():
+            edge = r.signal.edge or {}
+            horizon = edge.get("horizon", horizon)
+            for key in totals:
+                st = edge.get(key) or {}
+                if st.get("count"):
+                    totals[key][0] += st["count"]
+                    totals[key][1] += st["count"] * st["win_rate"]
+        if not totals["all"][0]:
+            return None
+        rise = {k: (w / n if n else None) for k, (n, w) in totals.items()}
+        return {
+            "horizon": horizon,
+            "buy_rise": rise["buy"], "buy_days": totals["buy"][0],
+            "sell_fall": None if rise["sell"] is None else 1 - rise["sell"], "sell_days": totals["sell"][0],
+            "all_rise": rise["all"], "all_fall": 1 - rise["all"], "coins": len(results),
+        }
+
     def signals_payload(self) -> dict:
         with self.lock:
             results = dict(self.results)
@@ -249,6 +272,8 @@ class DashboardApp:
             no_data = set(self.no_data)
             status = dict(self.status)
         status["app"] = self.notifier is not None
+        status["market"] = next((r.signal.market for r in results.values() if r.signal.market), None)
+        status["reliability"] = self._reliability(results)
         items = [self._summary(r, base_asset(s, self.quote)) for s, r in results.items()]
         for sym in universe:
             if sym in results:

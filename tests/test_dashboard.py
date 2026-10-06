@@ -60,6 +60,7 @@ def app(cfg, monkeypatch):
     engine.store.save("AAAUSDT", make_ohlcv(synthetic_prices(seed=1)))
     engine.store.save("BBBUSDT", make_ohlcv(synthetic_prices(seed=2)))
     engine.store.save("NEWUSDT", make_ohlcv(synthetic_prices(days=60, seed=4)))  # 220 günden kısa
+    engine.store.save("BTCUSDT", make_ohlcv(synthetic_prices(seed=9)))  # piyasa rejimi
     monkeypatch.setattr(dashboard, "get_quotes", lambda coin, exchanges=None: [])
     sent = []
     a = DashboardApp(cfg, engine=engine, symbols=["AAA", "BBB", "NEW"], notifier=lambda t, b: sent.append((t, b)))
@@ -74,6 +75,12 @@ def test_signals_payload(app):
     levels = {i["symbol"]: i["level"] for i in payload["items"]}
     assert set(levels) == {"AAAUSDT", "BBBUSDT", "NEWUSDT"}
     assert levels["NEWUSDT"] == "NODATA" and payload["items"][-1]["symbol"] == "NEWUSDT"
+    market = payload["status"]["market"]
+    assert market["regime"] in ("up", "down", "mixed") and market["label"]
+    rel = payload["status"]["reliability"]
+    assert rel["coins"] == 2 and 0 <= rel["buy_rise"] <= 1 and abs(rel["all_rise"] + rel["all_fall"] - 1) < 1e-9
+    total_days = sum(r.signal.edge["all"]["count"] for r in app.results.values())
+    assert rel["buy_days"] <= total_days
     assert payload["watch"] == {"favorites": [], "alarms": [], "settings": {"capital": None, "risk_pct": 1.0}}
     json.dumps(payload, allow_nan=False)
 

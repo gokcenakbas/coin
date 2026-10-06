@@ -11,6 +11,7 @@ def _setup(tmp_path, monkeypatch):
     store.save("AAAUSDT", make_ohlcv(synthetic_prices(seed=1)))
     store.save("BBBUSDT", make_ohlcv(synthetic_prices(seed=2)))
     store.save("NEWUSDT", make_ohlcv(synthetic_prices(days=100)))  # çok kısa, atlanmalı
+    store.save("BTCUSDT", make_ohlcv(synthetic_prices(seed=9)))  # piyasa rejimi için (ağa gitmesin)
     cfg_path = tmp_path / "config.yaml"
     cfg_path.write_text(yaml.safe_dump({"data_dir": str(data_dir)}))
     monkeypatch.setattr(cli, "get_quotes", lambda coin, exchanges=None: [])

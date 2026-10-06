@@ -107,6 +107,12 @@ def format_signal(sig: Signal, quotes: list[Quote] | None = None, detailed: bool
                 f"ort. {fmt_pct(h['avg_return'])}, yükselme oranı %{h['win_rate'] * 100:.0f}"
                 + (f" (tüm günlerin ortalaması {fmt_pct(base.get('avg_return'))})" if base.get("count") else "")
             )
+        e = sig.edge or {}
+        if e.get("buy", {}).get("count") and e.get("all", {}).get("count"):
+            lines.append(f"Geçmiş isabet (bu coin): AL'dan {e['horizon']} gün sonra yükselme %{e['buy']['win_rate'] * 100:.0f}, "
+                         f"herhangi bir günde %{e['all']['win_rate'] * 100:.0f}")
+        if sig.market:
+            lines.append(f"Piyasa (Bitcoin trendi): {sig.market['label']}")
         plan = sig.plan
         if plan:
             rr = f" | risk/ödül 1:{plan['risk_reward']:.1f}" if plan.get("risk_reward") else ""

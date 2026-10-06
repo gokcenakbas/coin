@@ -120,6 +120,8 @@ class Signal:
     take_profit: float | None = None
     history: dict = field(default_factory=dict)
     plan: dict | None = None
+    market: dict | None = None
+    edge: dict = field(default_factory=dict)  # AL/SAT sinyalinin geçmiş isabeti ve rastgele günle kıyası
 
     @property
     def label(self) -> str:
@@ -208,8 +210,34 @@ def build_reasons(scored: pd.DataFrame, cfg: dict) -> list[str]:
     return reasons
 
 
-def analyze(symbol: str, df: pd.DataFrame, cfg: dict, scored: pd.DataFrame | None = None) -> Signal:
-    """Bir coinin güncel sinyalini, gerekçelerini ve 5 yıllık geçmiş başarısını hesaplar."""
+def market_info(btc: pd.DataFrame) -> dict | None:
+    """Piyasanın (Bitcoin'in) güncel rejimi ve bu rejimin ne zamandır sürdüğü."""
+    if btc is None or btc.empty:
+        return None
+    if "sma200" not in btc.columns:
+        btc = add_indicators(btc)
+    regime = market_regime(btc)
+    last = btc.iloc[-1]
+    current = regime.iloc[-1]
+    changed = regime[regime != current]
+    since = regime.index[0] if changed.empty else regime.index[regime.index > changed.index[-1]][0]
+    return {
+        "regime": current,
+        "label": REGIME_LABELS[current],
+        "btc_price": float(last["close"]),
+        "btc_vs_sma200": None if pd.isna(last["sma200"]) else float(last["close"] / last["sma200"] - 1),
+        "since": since,
+    }
+
+
+def analyze(symbol: str, df: pd.DataFrame, cfg: dict, scored: pd.DataFrame | None = None,
+            market: pd.DataFrame | None = None) -> Signal:
+    """Bir coinin güncel sinyalini, gerekçelerini ve 5 yıllık geçmiş başarısını hesaplar.
+
+    `market`: Bitcoin'in günlük verisi. Verilirse güncel piyasa rejimi eklenir ve sinyalin geçmiş başarısı
+    rejimlere bölünür. (Gerçek veriyle yapılan ölçümde AL sinyalleri Bitcoin düşüşteyken daha KÖTÜ sonuç
+    vermediği için rejime göre sinyal değiştirilmez; yalnızca bilgi verilir. Bkz. tools/research/regime.py)
+    """
     scored = scored if scored is not None else score_frame(df, cfg)
     last = scored.iloc[-1]
     s = cfg["signals"]
@@ -230,17 +258,6 @@ def analyze(symbol: str, df: pd.DataFrame, cfg: dict, scored: pd.DataFrame | Non
         change_30d=_pct_change(scored["close"], 30),
     )
 
-    # Alım bölgesi, hedefler ve zarar-durdur (destek/direnç seviyelerinden)
-    signal.plan = trade_plan(scored, cfg)
-    if signal.plan:
-        signal.stop_loss = signal.plan["stop"]
-        signal.take_profit = signal.plan["target1"]
-    else:
-        atr_value = _num(last["atr"])
-        if atr_value:
-            signal.stop_loss = signal.price - risk["stop_atr_mult"] * atr_value
-            signal.take_profit = signal.price + risk["take_profit_atr_mult"] * atr_value
-
     # Geçmiş 5 yılda benzer sinyal oluştuğunda ne oldu?
     window = scored.loc[scored.index >= scored.index[-1] - pd.Timedelta(days=1826)]
     if signal.is_buy:
@@ -252,6 +269,32 @@ def analyze(symbol: str, df: pd.DataFrame, cfg: dict, scored: pd.DataFrame | Non
     signal.history = forward_return_stats(window["close"], mask, horizon)
     signal.history["horizon"] = horizon
     signal.history["baseline"] = forward_return_stats(window["close"], pd.Series(True, index=window.index), horizon)
+    # Sinyal gerçekten işe yarıyor mu? Güncel seviyeden bağımsız olarak AL ve SAT günlerinin sonuçları
+    signal.edge = {
+        "horizon": horizon,
+        "buy": forward_return_stats(window["close"], window["score"] >= s["buy_threshold"], horizon),
+        "sell": forward_return_stats(window["close"], window["score"] <= s["sell_threshold"], horizon),
+        "all": signal.history["baseline"],
+    }
+
+    # Piyasa rejimi: aynı sinyal, Bitcoin yükselişteyken ve düşüşteyken ne kadar işe yaramış?
+    if market is not None and not market.empty:
+        regime = market_regime(market).reindex(window.index).ffill()
+        signal.history["by_regime"] = {
+            key: forward_return_stats(window["close"], mask & (regime == key), horizon) for key in REGIME_LABELS
+        }
+        signal.market = market_info(market)
+
+    # Alım bölgesi, hedefler ve zarar-durdur (destek/direnç seviyelerinden)
+    signal.plan = trade_plan(scored, cfg)
+    if signal.plan:
+        signal.stop_loss = signal.plan["stop"]
+        signal.take_profit = signal.plan["target1"]
+    else:
+        atr_value = _num(last["atr"])
+        if atr_value:
+            signal.stop_loss = signal.price - risk["stop_atr_mult"] * atr_value
+            signal.take_profit = signal.price + risk["take_profit_atr_mult"] * atr_value
     if signal.plan and signal.history.get("count"):
         # 5 yıllık geçmişte bu sinyalden `horizon` gün sonra ortalama nerede olunduğu (tahmin değil, ortalama)
         signal.plan["hist_avg_price"] = signal.price * (1 + signal.history["avg_return"])

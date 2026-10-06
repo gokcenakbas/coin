@@ -132,6 +132,27 @@ En uygun alış: okx 142.25 (SOL/USDT) → https://www.okx.com/tr/trade-spot/sol
 ```
 *(rakamlar örnektir)*
 
+## Sinyaller ne kadar güvenilir?
+
+Panelin üstündeki **"Sinyaller ne kadar güvenilir?"** kartı, açık olan coin listesinin son 5 yılını kullanarak
+şunu canlı olarak hesaplar: AL sinyalinden 30 gün sonra fiyat yüzde kaç oranında yükseldi, herhangi bir günde
+bu oran neydi? Her coinin "Neden?" bölümünde aynı karşılaştırma o coin için ve piyasa durumuna
+(Bitcoin yükselişte / kararsız / düşüşte) göre ayrı ayrı gösterilir. Başlıktaki **Piyasa** göstergesi Bitcoin'in
+200 günlük ortalamaya göre trendini gösterir.
+
+Gerçek veriyle yapılan ölçüm (Ekim 2026, en büyük 35 coin, `tools/research/`):
+
+| | Son 5 yıl | Son 2 yıl |
+|---|---|---|
+| AL sinyalinden 30 gün sonra yükselme | %40 | %32 |
+| Herhangi bir günde 30 gün sonra yükselme | %43 | %43 |
+| Mevcut kuralla açılan işlemlerin kârla kapanma oranı | %36 | %34 |
+
+Yani teknik puan tek başına rastgele bir günden daha iyi sonuç vermedi. Bitcoin düşüşteyken AL sinyallerini
+engellemek de sonucu iyileştirmedi (o dönemlerde AL sinyalleri ortalamadan kötü değildi). Ayrıca
+"yükseliş trendinde geri çekilmede al" stratejisi denendi: %60-67 başarı oranına ulaştı ama son 2 yılda zarar
+ettirdi, bu yüzden uygulamaya eklenmedi. Sinyalleri tek başına karar olarak değil, yardımcı bilgi olarak kullanın.
+
 ## Sinyal nasıl hesaplanır?
 
 Her gün için aşağıdaki bileşenler toplanır:
