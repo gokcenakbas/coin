@@ -153,6 +153,24 @@ engellemek de sonucu iyileştirmedi (o dönemlerde AL sinyalleri ortalamadan kö
 "yükseliş trendinde geri çekilmede al" stratejisi denendi: %60-67 başarı oranına ulaştı ama son 2 yılda zarar
 ettirdi, bu yüzden uygulamaya eklenmedi. Sinyalleri tek başına karar olarak değil, yardımcı bilgi olarak kullanın.
 
+## Hızlı hareketler önceden sezilebilir mi?
+
+`tools/research/fastmoves.py` ile ölçüldü (Ekim 2026, 39 coin, 1 yıllık saatlik veri; "hızlı hareket" = sonraki
+4 saatte ±%5; herhangi bir saatte olasılığı ~%6-7). Sonuçlar ilk 8 ay / son 4 ay ayrı ayrı:
+
+| Öncü iz | Olasılık (kat) | Yön |
+|---|---|---|
+| Saatlik hacim normalin ≥3 katı | ~%16 (2,3-2,5×) | yukarı ≈ aşağı |
+| Saatlik hacim normalin ≥5 katı | ~%22 (3,1-3,2×) | yukarı ≈ aşağı |
+| Hacimle 3 günlük tepe kırılımı | %18-24 (2,4-3,8×) | iki yön de |
+| Hacimle 3 günlük dip kırılımı | tutarsız (2,3× / 1,0×) | — |
+| Sıkışma (Bollinger bandı 30 günün en darında) | **~%3 (0,4-0,5×)** | — |
+
+Panelin **🚀 Patlama adayları** kartı yalnızca tutarlı çıkan iki izi (hacim patlaması, hacimli yukarı kırılım)
+gösterir; büyük hareket olasılığını söyler, yönünü söylemez. **⚡ Erken uyarı** ise tüm coinlerin 1 dakikalık
+mumlarını izler: bir dakikadaki hacim normalin 5 katını aşar ve fiyat aynı dakikada %0,8'den fazla oynarsa haber verir
+(5 dakikada %3 eşiğini beklemeden).
+
 ## Sinyal nasıl hesaplanır?
 
 Her gün için aşağıdaki bileşenler toplanır:

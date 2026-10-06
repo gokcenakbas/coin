@@ -209,7 +209,11 @@ Grafikler: <a href="https://www.tradingview.com/" target="_blank" rel="noopener"
 <script>
 "use strict";
 const MOVE_THRESHOLD = 3;           // %
-const MOVERS_NOTE = "";              // araştırma sonucuna göre doldurulacak
+// tools/research/fastmoves.py ile gerçek veride ölçülen sonuç (Ekim 2026, 39 coin, 1 yıllık saatlik veri)
+const MOVERS_NOTE = "Bu liste <b>büyük hareket olasılığını</b> gösterir, <b>yönünü değil</b>. Son 1 yılda herhangi bir saatte sonraki " +
+  "4 saatte ±%5 hareket olasılığı ~%6-7 idi; saatlik hacim normalin 3 katını geçtiğinde ~%16, 5 katını geçtiğinde ~%22, hacimli yukarı " +
+  "kırılımdan sonra ~%18-24'e çıktı. Ancak yukarı ve aşağı hareket neredeyse eşit sıklıkta oldu. \"Sıkışma\" (dar bant) ise olasılığı " +
+  "yarıya düşürdüğü için listede yok.";
 const MOVE_WINDOW_MS = 5 * 60e3;
 const MOVE_COOLDOWN_MS = 15 * 60e3;
 const WS_BASES = ["wss://data-stream.binance.vision", "wss://stream.binance.com:9443"];
@@ -303,7 +307,7 @@ function renderReliability(r) {
   const sell = r.sell_fall == null ? null : edgeVerdict(r.sell_fall, r.all_fall);
   const weak = buy.cls !== "good";
   card.className = "card " + (buy.cls === "good" ? "good" : buy.cls === "bad" ? "bad" : "");
-  card.style.display = "";
+  card.style.display = "block";
   $("#relBody").innerHTML = `
     <p>Son 5 yılda bu listedeki ${r.coins} coinde, <b>AL</b> sinyalinden ${r.horizon} gün sonra fiyat <b>${pctInt(r.buy_rise)}</b> oranında yükseldi;
       herhangi bir günde bu oran <b>${pctInt(r.all_rise)}</b> → <b>${buy.text}</b>.
@@ -430,10 +434,8 @@ const EARLY_MOVE = 0.008;      // aynı dakikada en az %0,8 fiyat hareketiyle bi
 const EARLY_MIN_USD = 50000;   // çok sığ coinlerde yanlış alarmı önlemek için
 let moversTimer = null;
 const tagText = (c, t) => ({
-  squeeze: `🔒 Sıkışma (%${Math.round(c.squeeze_pct * 100)})`,
   volume: `📊 Hacim ${c.rvol.toFixed(1).replace(".", ",")}x`,
   breakout_up: "⬆ 3 günlük tepe kırıldı",
-  breakout_down: "⬇ 3 günlük dip kırıldı",
 }[t] || t);
 
 async function loadMovers() {
@@ -443,11 +445,11 @@ async function loadMovers() {
     const d = await (await fetch("/api/movers")).json();
     state.baseline = d.baseline || {};
     const card = $("#moversCard");
-    card.style.display = d.updated ? "" : "none";
+    card.style.display = d.updated ? "block" : "none";
     $("#moversInfo").textContent = d.updated ? `· ${d.items.length} coin · ${new Date(d.updated).toLocaleTimeString("tr-TR", {hour: "2-digit", minute: "2-digit"})}` : "";
     $("#movers").innerHTML = d.items.length ? d.items.map(c =>
       `<div class="move" data-s="${esc(c.symbol)}" title="Son kapanmış saat: ${esc(c.hour)}"><b>${esc(c.base)}</b>${c.tags.map(t => `<span class="tag">${tagText(c, t)}</span>`).join("")}</div>`).join("")
-      : `<span class="muted">Şu an sıkışmada, hacim patlamasında ya da kırılımda olan coin yok.</span>`;
+      : `<span class="muted">Şu an hacmi normalin 3 katını aşan ya da hacimle 3 günlük tepesini kıran coin yok.</span>`;
     $("#moversNote").innerHTML = MOVERS_NOTE;
     if (Object.keys(state.baseline).length) connectMinuteStream(Object.keys(state.baseline));
     if (d.updated) delay = 5 * 60e3;

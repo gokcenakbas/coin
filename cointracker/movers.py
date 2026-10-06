@@ -2,6 +2,13 @@
 
 Aynı hesaplar hem araştırmada (tools/research/fastmoves.py) hem de uygulamadaki
 "Patlama adayları" listesinde kullanılır; böylece uygulama tam olarak ölçülen şeyi gösterir.
+
+Gerçek veriyle ölçüm (Ekim 2026, 39 coin, 1 yıl saatlik; olay = sonraki 4 saatte ±%5, normalde ~%6-7):
+  * Hacim normalin ≥3 katı: olasılık ~2,5 kat; ≥5 katı: ~3 kat (iki dönemde de tutarlı)
+  * Hacimle yukarı kırılım (3 günlük tepe): ~2,4-3,8 kat
+  * Sıkışma (dar bant): olasılığı YARIYA düşürdü → aday sayılmaz
+  * Hacimle aşağı kırılım: dönemler arasında tutarsız → aday sayılmaz
+  * Hiçbiri yönü söylemiyor: yukarı ve aşağı büyük hareket benzer sıklıkta
 """
 
 from __future__ import annotations
@@ -14,9 +21,8 @@ SQUEEZE_WINDOW = 720  # 30 gün: bant genişliği bu süre içindeki yerine gör
 VOLUME_WINDOW = 72    # 3 gün: "normal" saatlik hacim
 BREAKOUT_WINDOW = 72  # 3 günlük tepe/dip
 
-SQUEEZE_PCT = 0.10    # bant genişliği 30 günün en dar %10'unda → sıkışma
 RVOL_HIGH = 3.0       # saatlik hacim normalin 3 katı → hacim patlaması
-RVOL_BREAKOUT = 2.0   # kırılımın sayılması için gereken hacim
+RVOL_BREAKOUT = 2.0   # yukarı kırılımın sayılması için gereken hacim
 
 
 def features(df: pd.DataFrame) -> pd.DataFrame:
@@ -48,24 +54,16 @@ def candidate(df: pd.DataFrame) -> dict | None:
     f = features(df).iloc[-2]  # son satır henüz kapanmamış saat; kapanmış son saate bak
     if pd.isna(f["squeeze_pct"]) or pd.isna(f["rvol"]):
         return None
-    squeeze = f["squeeze_pct"] <= SQUEEZE_PCT
     volume = f["rvol"] >= RVOL_HIGH
-    brk = "up" if f["breakout_up"] and f["rvol"] >= RVOL_BREAKOUT else \
-        "down" if f["breakout_down"] and f["rvol"] >= RVOL_BREAKOUT else None
-    if not (squeeze or volume or brk):
+    breakout = bool(f["breakout_up"]) and f["rvol"] >= RVOL_BREAKOUT
+    if not (volume or breakout):
         return None
-    tags = []
-    if squeeze:
-        tags.append("squeeze")
-    if volume:
-        tags.append("volume")
-    if brk:
-        tags.append(f"breakout_{brk}")
+    tags = (["volume"] if volume else []) + (["breakout_up"] if breakout else [])
     return {
         "tags": tags,
         "squeeze_pct": float(f["squeeze_pct"]),
         "rvol": float(f["rvol"]),
-        "breakout": brk,
+        "breakout": "up" if breakout else None,
         "ret_1h": float(f["ret_1h"]),
         "range_3d": None if pd.isna(f["range_3d"]) else float(f["range_3d"]),
         "hour": df.index[-2],

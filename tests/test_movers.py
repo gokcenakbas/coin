@@ -43,11 +43,20 @@ def test_volume_spike_detected_on_last_closed_hour():
     assert candidate(hourly(noisy(seed=4), vol2)) is None or "volume" not in candidate(hourly(noisy(seed=4), vol2))["tags"]
 
 
-def test_squeeze_detected_when_range_narrows():
+def test_squeeze_alone_is_not_a_candidate():
+    """Gerçek veride sıkışma büyük hareket olasılığını düşürdü; tek başına aday sayılmaz."""
     closes = np.concatenate([noisy(770, 0.02, seed=5), np.full(30, 1.0)])
     closes[-30:] = closes[-31] * (1 + 0.0002 * np.sin(np.arange(30)))
-    c = candidate(hourly(closes))
-    assert c and "squeeze" in c["tags"] and c["squeeze_pct"] <= 0.10
+    df = hourly(closes)
+    assert features(df).iloc[-2]["squeeze_pct"] <= 0.10
+    assert candidate(df) is None
+
+
+def test_downside_breakout_is_not_a_candidate():
+    closes = np.concatenate([100 + np.sin(np.arange(798) / 5), [90, 90]])
+    vol = np.full(800, 1e6)
+    vol[-2] = 2.5e6
+    assert candidate(hourly(closes, vol)) is None
 
 
 def test_breakout_needs_volume():
