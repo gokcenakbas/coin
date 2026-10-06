@@ -1,0 +1,60 @@
+# Kâğıt üzerinde (sanal 1000 $) işlem deneyi. Gerçek Binance fiyatları, sabit kurallar (cointracker/papertrade.py).
+#   replay : geçmiş 24 saati aynı kurallarla prova eder (paper/prova.md)
+#   start  : bir sonraki 15 dakikadan itibaren 24 saatlik deneyi başlatır
+#   step   : deneyi şimdiye kadar ilerletir (zamanlanmış olarak 20 dakikada bir çalışır)
+# Rapor her çalıştırmanın özet sayfasında ve "paper-..." artifact'ında.
+name: papertrade
+
+on:
+  schedule:
+    - cron: "*/20 * * * *"
+  workflow_dispatch:
+    inputs:
+      command:
+        description: "replay | start | step"
+        default: step
+
+concurrency:
+  group: papertrade
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+
+      - uses: actions/cache/restore@v4
+        with:
+          path: paper
+          key: paper-${{ github.run_id }}
+          restore-keys: paper-
+
+      - name: Deneyi çalıştır
+        env:
+          COMMAND: ${{ inputs.command || 'step' }}
+        run: |
+          if [ "$COMMAND" = "replay" ]; then
+            python -m cointracker.papertrade replay --hours 24 --state paper/replay.json --out paper/prova.md --summary "$GITHUB_STEP_SUMMARY"
+          else
+            python -m cointracker.papertrade "$COMMAND" --state paper/state.json --out paper/rapor.md --summary "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: paper
+          key: paper-${{ github.run_id }}
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paper-${{ github.run_id }}
+          path: paper
+          if-no-files-found: ignore

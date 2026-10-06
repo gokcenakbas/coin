@@ -58,23 +58,23 @@ class BinanceClient:
         assert last_exc is not None
         raise last_exc
 
-    def klines(self, symbol: str, start: datetime, end: datetime | None = None) -> pd.DataFrame:
-        """Günlük mumları sayfalayarak indirir (istek başına en fazla 1000 mum)."""
+    def klines(self, symbol: str, start: datetime, end: datetime | None = None, interval: str = "1d") -> pd.DataFrame:
+        """[start, end] aralığındaki mumları sayfalayarak indirir (istek başına en fazla 1000 mum)."""
         start_ms = int(start.timestamp() * 1000)
         end_ms = int((end or datetime.now(timezone.utc)).timestamp() * 1000)
         rows: list[list] = []
         while start_ms <= end_ms:
             batch = self._get(
                 "/api/v3/klines",
-                {"symbol": symbol, "interval": "1d", "startTime": start_ms, "endTime": end_ms, "limit": 1000},
+                {"symbol": symbol, "interval": interval, "startTime": start_ms, "endTime": end_ms, "limit": 1000},
             )
             if not batch:
                 break
             rows.extend(batch)
             if len(batch) < 1000:
                 break
-            start_ms = batch[-1][0] + DAY_MS
-        return klines_to_frame(rows)
+            start_ms = batch[-1][0] + 1
+        return klines_to_frame(rows, normalize=interval == "1d")
 
     def recent_klines(self, symbol: str, interval: str = "1h", limit: int = 500) -> pd.DataFrame:
         """Son `limit` mum (1m, 5m, 15m, 1h, 4h, 1d...). Gün içi grafik ve sinyaller için."""
