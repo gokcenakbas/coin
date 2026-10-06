@@ -100,3 +100,15 @@ def test_stop_has_priority_and_report_renders():
     assert reasons <= {"zarar-durdur", "kâr-al", "sinyal döndü", "süre doldu", "deney sonu"}
     text = report(copy.deepcopy(state))
     assert "Kâğıt üzerinde işlem raporu" in text and text.count("\n| ") >= len(state["trades"])
+
+
+def test_btc_comparison_while_running_and_recovered_start():
+    client = FakeMinuteClient(SYMS)
+    btc = client.data["BTCUSDT"]
+    state = run([T0 + pd.Timedelta(hours=3)], client=client)
+    expected = btc.loc[T0 + pd.Timedelta(hours=3) - pd.Timedelta(minutes=1), "close"] / btc.loc[T0, "open"] - 1
+    assert not state["finished"] and np.isclose(summary(state)["btc_return"], expected)
+    # ilk adımda başlangıç fiyatı alınamadıysa sonraki adımda deney başlangıcının fiyatı kullanılır
+    del state["benchmark"]["btc_start"]
+    PaperTrader(state).advance(client, T0 + pd.Timedelta(hours=4))
+    assert state["benchmark"]["btc_start"] == btc.loc[T0, "open"]

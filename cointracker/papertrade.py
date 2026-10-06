@@ -151,8 +151,16 @@ class PaperTrader:
             except Exception as exc:  # tek coinin verisi gelmezse o coin bu turda atlanır
                 log.warning("%s verisi alınamadı: %s", sym, exc)
         bench = d1.get(BENCHMARK)
-        if "btc_start" not in self.s["benchmark"] and bench is not None and cursor in bench.index:
-            self.s["benchmark"]["btc_start"] = float(bench.loc[cursor, "open"])
+        start = _ts(self.s["start"])
+        if "btc_start" not in self.s["benchmark"]:
+            if cursor != start:  # ilk adımda alınamadıysa başlangıç fiyatını ayrıca iste
+                try:
+                    bench = client.klines(BENCHMARK, _utc(start), _utc(start + MINUTE - pd.Timedelta(milliseconds=1)), "1m")
+                except Exception as exc:
+                    log.warning("BTC başlangıç fiyatı alınamadı: %s", exc)
+                    bench = None
+            if bench is not None and start in bench.index:
+                self.s["benchmark"]["btc_start"] = float(bench.loc[start, "open"])
 
         last_price: dict[str, float] = {}
         t = cursor
@@ -167,6 +175,8 @@ class PaperTrader:
                     last_price[sym] = float(done["close"].iloc[-1])
             self.s["cursor"] = t.isoformat()
             self.s["equity"].append([t.isoformat(), self.equity(last_price)])
+        if BENCHMARK in last_price:
+            self.s["benchmark"]["btc_last"] = last_price[BENCHMARK]
 
         if t >= end:
             for sym in list(self.s["positions"]):
@@ -243,7 +253,8 @@ def summary(state: dict) -> dict:
     wins = [t for t in trades if t["pnl"] > 0]
     losses = [t for t in trades if t["pnl"] <= 0]
     bench = state.get("benchmark", {})
-    btc = bench["btc_end"] / bench["btc_start"] - 1 if {"btc_start", "btc_end"} <= bench.keys() else None
+    btc_now = bench.get("btc_end", bench.get("btc_last"))  # deney sürerken son fiyatla karşılaştır
+    btc = btc_now / bench["btc_start"] - 1 if btc_now and bench.get("btc_start") else None
     return {
         "start": state["start"], "end": state["end"], "finished": state["finished"], "cursor": state["cursor"],
         "start_cash": start_cash, "equity": final, "pnl": final - start_cash, "pnl_pct": final / start_cash - 1,
