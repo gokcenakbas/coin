@@ -31,6 +31,7 @@ from cointracker.engine import CoinAnalysis, Engine
 from cointracker.exchanges import get_quotes
 from cointracker.indicators import add_indicators
 from cointracker.live import INTRADAY_TIMEFRAMES, orderbook_summary, ticker_summary, timeframe_signal
+from cointracker.movers import candidate
 from cointracker.signals import LABELS_TR
 
 log = logging.getLogger(__name__)
@@ -145,6 +146,7 @@ class DashboardApp:
         self.watch = WatchStore(Path(cfg["data_dir"]) / "watchlist.json")
         self._detail_cache: dict[str, tuple[float, dict]] = {}
         self._refresh_lock = threading.Lock()
+        self.movers: dict = {"updated": None, "items": [], "baseline": {}}
 
     # ---- arka plan yenileme -------------------------------------------------
     def _set_status(self, **kw) -> None:
@@ -217,9 +219,43 @@ class DashboardApp:
                 self.no_data &= keep
             self._set_status(phase="ready", updated=datetime.now(timezone.utc).isoformat())
             self._notify_level_changes(previous)
+            self.scan_movers(symbols)
         except Exception as exc:
             log.exception("Panel verisi yenilenemedi")
             self._set_status(phase="ready" if self.results else "error", error=str(exc))
+
+    def _scan_one(self, symbol: str) -> tuple[str, dict | None, float | None]:
+        client = self.engine.client
+        cand = baseline = None
+        try:
+            cand = candidate(client.recent_klines(symbol, "1h", 800))
+        except Exception as exc:
+            log.debug("%s saatlik veri alınamadı: %s", symbol, exc)
+        try:
+            minutes = client.recent_klines(symbol, "1m", 61).iloc[:-1]  # son dakika henüz kapanmadı
+            if len(minutes) >= 30:
+                baseline = float(minutes["quote_volume"].median())
+        except Exception as exc:
+            log.debug("%s dakikalık veri alınamadı: %s", symbol, exc)
+        return symbol, cand, baseline
+
+    def scan_movers(self, symbols: list[str]) -> None:
+        """Patlama adaylarını (sıkışma / hacim patlaması / kırılım) ve dakikalık normal hacimleri günceller."""
+        items, baseline = [], {}
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            for sym, cand, base in pool.map(self._scan_one, symbols):
+                if base:
+                    baseline[sym] = base
+                if cand:
+                    items.append({"symbol": sym, "base": base_asset(sym, self.quote), **cand})
+        # Önce birden çok iz taşıyanlar, sonra hacmi en çok artanlar
+        items.sort(key=lambda i: (len(i["tags"]), i["rvol"]), reverse=True)
+        with self.lock:
+            self.movers = {"updated": datetime.now(timezone.utc).isoformat(), "items": items, "baseline": baseline}
+
+    def movers_payload(self) -> dict:
+        with self.lock:
+            return clean(dict(self.movers))
 
     def _notify_level_changes(self, previous: dict[str, str]) -> None:
         """Takip listesindeki coinlerin sinyali değiştiyse bildirim gönderir."""
@@ -429,6 +465,8 @@ def make_handler(app: DashboardApp, loopback_only: bool = True) -> type[BaseHTTP
                         self._json({"error": "geçersiz zaman dilimi"}, 400)
                         return
                     self._json(app.klines_payload(normalize_symbol(query.get("symbol", "BTC"), app.quote), interval))
+                elif url.path == "/api/movers":
+                    self._json(app.movers_payload())
                 elif url.path == "/api/watchlist":
                     self._json(app.watch.snapshot())
                 else:

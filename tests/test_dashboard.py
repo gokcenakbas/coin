@@ -214,3 +214,13 @@ def test_refresh_does_not_run_twice_at_once(app):
     assert app.refresh_now() is True
     time.sleep(0.4)
     assert len(started) == 2
+
+
+def test_movers_scan_and_endpoint(app):
+    app.scan_movers(["AAAUSDT", "BBBUSDT"])
+    payload = app.movers_payload()
+    assert payload["updated"] and set(payload["baseline"]) == {"AAAUSDT", "BBBUSDT"}
+    assert all(v > 0 for v in payload["baseline"].values())
+    for item in payload["items"]:
+        assert item["tags"] and item["base"] in ("AAA", "BBB")
+    json.dumps(payload, allow_nan=False)
