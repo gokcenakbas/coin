@@ -144,6 +144,7 @@ class DashboardApp:
         self.status = {"phase": "starting", "done": 0, "total": 0, "updated": None, "error": None}
         self.watch = WatchStore(Path(cfg["data_dir"]) / "watchlist.json")
         self._detail_cache: dict[str, tuple[float, dict]] = {}
+        self._refresh_lock = threading.Lock()
 
     # ---- arka plan yenileme -------------------------------------------------
     def _set_status(self, **kw) -> None:
@@ -165,8 +166,28 @@ class DashboardApp:
             self.engine.update_one(symbol)
         return self.engine.analyze_symbol(symbol)
 
-    def refresh(self, update: bool = True) -> None:
-        """Coinleri tek tek günceller ve analiz eder; her coin bittiği anda panelde görünür."""
+    def refresh(self, update: bool = True) -> bool:
+        """Coinleri tek tek günceller ve analiz eder; her coin bittiği anda panelde görünür.
+
+        Zaten bir yenileme sürüyorsa hiçbir şey yapmaz ve False döner.
+        """
+        if not self._refresh_lock.acquire(blocking=False):
+            return False
+        try:
+            self._refresh(update)
+        finally:
+            self._refresh_lock.release()
+        return True
+
+    def refresh_now(self) -> bool:
+        """Arayüzdeki "Yenile" düğmesi: yenilemeyi arka planda başlatır (sürüyorsa yeniden başlatmaz)."""
+        if self._refresh_lock.locked():
+            return False
+        self._detail_cache.clear()
+        threading.Thread(target=self.refresh, daemon=True, name="dashboard-manual-refresh").start()
+        return True
+
+    def _refresh(self, update: bool) -> None:
         try:
             symbols = self.fixed_symbols or self.engine.universe()
             with self.lock:
@@ -430,6 +451,8 @@ def make_handler(app: DashboardApp, loopback_only: bool = True) -> type[BaseHTTP
                 path = urlparse(self.path).path
                 if path == "/api/watchlist":
                     self._json(app.watch.apply(body, app.quote))
+                elif path == "/api/refresh":
+                    self._json({"started": app.refresh_now()})
                 elif path == "/api/notify":
                     self._json({"ok": app.notify(str(body.get("title", ""))[:200], str(body.get("body", ""))[:500])})
                 else:

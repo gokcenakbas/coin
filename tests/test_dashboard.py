@@ -183,6 +183,8 @@ def test_http_server_routes(app):
         assert post("/api/watchlist", {"action": "toggle", "symbol": "AAA"}, ctype="text/plain")[0] == 403
         assert post("/api/watchlist", {"action": "nuke"})[0] == 400
         assert post("/api/notify", {"title": "t", "body": "b"}) == (200, {"ok": True})
+        code, data = post("/api/refresh", {})
+        assert code == 200 and isinstance(data["started"], bool)
         assert app.sent[-1] == ("t", "b")
         assert post("/api/notify", {"title": "x"}, host="evil.example.com")[0] == 403
         req = urllib.request.Request(base + "/api/signals", headers={"Host": "evil.example.com:80"})
@@ -193,3 +195,22 @@ def test_http_server_routes(app):
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_refresh_does_not_run_twice_at_once(app):
+    import time
+    started = []
+
+    def slow(update):
+        started.append(1)
+        time.sleep(0.3)
+
+    app._refresh = slow
+    assert app.refresh_now() is True
+    time.sleep(0.05)
+    assert app.refresh_now() is False  # ilki sürüyor
+    assert app.refresh(update=False) is False
+    time.sleep(0.4)
+    assert app.refresh_now() is True
+    time.sleep(0.4)
+    assert len(started) == 2

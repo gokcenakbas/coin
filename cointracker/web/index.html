@@ -105,6 +105,12 @@ td a,.kv a{color:var(--accent);text-decoration:none}
 #relCard.good{border-left-color:var(--up)}#relCard.bad{border-left-color:var(--down)}
 #relCard p{margin:4px 0 0}
 .edge{margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--hover)}
+.ctx{position:fixed;z-index:50;display:none;min-width:190px;background:var(--card);border:1px solid var(--line);
+  border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.35);padding:5px}
+.ctx button{display:block;width:100%;text-align:left;border:0;background:transparent;padding:7px 10px;border-radius:6px}
+.ctx button:hover{background:var(--hover)}
+.ctx small{color:var(--muted);float:right;margin-left:12px}
+#refreshBtn.busy{opacity:.7;pointer-events:none}
 footer{color:var(--muted);font-size:12px;text-align:center;padding:4px 16px 20px}
 @media (max-width:700px){.hide-sm{display:none}#chart{height:320px}.tf{grid-template-columns:repeat(2,1fr)}input[type=search]{width:120px}}
 </style>
@@ -117,6 +123,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:4px 16px 20px
   <span class="pill" id="counts"></span>
   <span class="pill" id="marketPill" style="display:none"></span>
   <span class="spacer"></span>
+  <button id="refreshBtn" title="Verileri, canlı fiyat bağlantısını ve grafiği güncelle (R)">↻ Yenile</button>
   <button id="notifyBtn" title="Hızlı fiyat hareketlerinde masaüstü bildirimi">🔔 Bildirimleri aç</button>
 </header>
 
@@ -169,6 +176,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:4px 16px 20px
     <div class="toolbar" id="intervals">
       <button data-iv="1m">1dk</button><button data-iv="5m">5dk</button><button data-iv="15m">15dk</button>
       <button data-iv="1h">1sa</button><button data-iv="4h">4sa</button><button data-iv="1d">1g</button><button data-iv="1w">1h</button>
+      <button id="resetChart" title="Grafiği sıfırla: fiyat ekseni otomatik, son mumlar görünür (çift tıklama da olur)">⟲ Sıfırla</button>
       <span class="spacer"></span>
       <label class="muted"><input type="checkbox" id="showLevels" checked> Seviyeler</label>
       <label class="muted"><input type="checkbox" id="showBB"> Bollinger</label>
@@ -180,6 +188,10 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:4px 16px 20px
   </section>
 </main>
 <div id="toasts"></div>
+<div class="ctx" id="ctxMenu">
+  <button data-act="reset">⟲ Grafiği sıfırla <small>çift tık</small></button>
+  <button data-act="refresh">↻ Yenile <small>R</small></button>
+</div>
 <footer>⚠️ Yatırım tavsiyesi değildir. Sinyaller teknik göstergelere dayalı otomatik hesaplamalardır; geçmiş performans geleceği garanti etmez.
 Grafikler: <a href="https://www.tradingview.com/" target="_blank" rel="noopener">TradingView Lightweight Charts</a>.</footer>
 
@@ -214,7 +226,9 @@ const state = {
 };
 
 /* ---------------- 5 yıllık sinyal listesi ---------------- */
+let signalsTimer = null;
 async function loadSignals() {
+  clearTimeout(signalsTimer);
   let delay = 60e3;
   try {
     const d = await (await fetch("/api/signals")).json();
@@ -235,7 +249,7 @@ async function loadSignals() {
     $("#dataStatus").textContent = "Sunucuya ulaşılamıyor";
     delay = 5000;
   }
-  setTimeout(loadSignals, delay);
+  signalsTimer = setTimeout(loadSignals, delay);
 }
 
 function renderStatus(s) {
@@ -349,11 +363,19 @@ function renderTable() {
 }
 
 /* ---------------- Anlık fiyat akışı (tüm coinler, saniyede bir) ---------------- */
+let marketWs = null, marketRetry = null, lastTickAt = 0;
 function connectMarket(attempt = 0) {
+  clearTimeout(marketRetry);
+  if (marketWs) { marketWs.onclose = null; try { marketWs.close(); } catch (e) {} }
   const ws = new WebSocket(`${WS_BASES[attempt % WS_BASES.length]}/ws/!miniTicker@arr`);
+  marketWs = ws;
   ws.onopen = () => setConn(true);
-  ws.onmessage = ev => onTickers(JSON.parse(ev.data));
-  ws.onclose = () => { setConn(false); setTimeout(() => connectMarket(attempt + 1), Math.min(30e3, 2000 * (attempt + 1))); };
+  ws.onmessage = ev => { lastTickAt = Date.now(); onTickers(JSON.parse(ev.data)); };
+  ws.onclose = () => {
+    if (marketWs !== ws) return;
+    setConn(false);
+    marketRetry = setTimeout(() => connectMarket(attempt + 1), Math.min(30e3, 2000 * (attempt + 1)));
+  };
 }
 
 function setConn(on) {
@@ -880,6 +902,67 @@ $("#notifyBtn").onclick = async () => {
 };
 if ("Notification" in window && Notification.permission === "granted") $("#notifyBtn").textContent = "🔔 Bildirimler açık";
 $("#moveThr").textContent = MOVE_THRESHOLD;
+
+function resetChart() {
+  if (!chart) return;
+  chart.priceScale("right").applyOptions({autoScale: true});
+  const n = candleS.data().length;
+  if (n) chart.timeScale().setVisibleLogicalRange({from: Math.max(0, n - 150), to: n + 3});
+}
+
+let refreshing = false;
+async function refreshAll(reason) {
+  if (refreshing) return;
+  refreshing = true;
+  const btn = $("#refreshBtn");
+  btn.classList.add("busy"); btn.textContent = "↻ Yenileniyor…";
+  try {
+    await fetch("/api/refresh", {method: "POST", headers: {"Content-Type": "application/json"}, body: "{}"}).catch(() => {});
+    connectMarket();                       // uykuda kopmuş olabilecek canlı fiyat bağlantısını yeniden kur
+    await loadSignals();
+    if (state.selected) { await loadChart(); resetChart(); loadDetail(); }
+    toast(reason || "Güncellendi", "Fiyatlar, sinyaller ve grafik yenilendi");
+  } finally {
+    refreshing = false;
+    btn.classList.remove("busy"); btn.textContent = "↻ Yenile";
+  }
+}
+
+$("#resetChart").onclick = resetChart;
+$("#refreshBtn").onclick = () => refreshAll();
+$("#chart").addEventListener("dblclick", resetChart);
+const ctx = $("#ctxMenu");
+$("#chart").addEventListener("contextmenu", e => {
+  e.preventDefault();
+  ctx.style.display = "block";
+  ctx.style.left = Math.min(e.clientX, window.innerWidth - ctx.offsetWidth - 8) + "px";
+  ctx.style.top = Math.min(e.clientY, window.innerHeight - ctx.offsetHeight - 8) + "px";
+});
+ctx.onclick = e => {
+  const b = e.target.closest("[data-act]");
+  ctx.style.display = "none";
+  if (b && b.dataset.act === "reset") resetChart();
+  if (b && b.dataset.act === "refresh") refreshAll();
+};
+document.addEventListener("click", e => { if (!e.target.closest("#ctxMenu")) ctx.style.display = "none"; });
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") ctx.style.display = "none";
+  const typing = /INPUT|TEXTAREA/.test((e.target.tagName || ""));
+  if (!typing && !e.metaKey && !e.ctrlKey && (e.key === "r" || e.key === "R")) { e.preventDefault(); refreshAll(); }
+});
+
+// Bilgisayar uykudan uyanınca (saat birden ileri atlar) ya da canlı fiyat uzun süre gelmezse kendiliğinden yenile
+let lastBeat = Date.now();
+setInterval(() => {
+  const now = Date.now(), slept = now - lastBeat > 60e3;
+  lastBeat = now;
+  if (slept) refreshAll("Uykudan uyanıldı, veriler güncellendi");
+  else if (lastTickAt && now - lastTickAt > 90e3 && document.visibilityState === "visible") connectMarket();
+}, 5000);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && lastTickAt && Date.now() - lastTickAt > 120e3)
+    refreshAll("Veriler eskimişti, güncellendi");
+});
 
 loadSignals().then(() => {
   // Açılışta bir coin seç: adres çubuğundaki, takip listesindeki ilk coin ya da BTC
