@@ -59,6 +59,23 @@ def score_frame(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     return out
 
 
+REGIME_LABELS = {"up": "Yükseliş", "down": "Düşüş", "mixed": "Kararsız"}
+
+
+def market_regime(btc: pd.DataFrame) -> pd.Series:
+    """Bitcoin'in trendine göre piyasa rejimi: 'up' | 'down' | 'mixed'.
+
+    yükseliş: BTC 200G ortalamanın üstünde ve 50G > 200G; düşüş: ikisi de tersi; diğerleri kararsız.
+    """
+    if "sma200" not in btc.columns:
+        btc = add_indicators(btc)
+    known = btc["sma200"].notna()
+    above = btc["close"] > btc["sma200"]
+    golden = btc["sma50"] > btc["sma200"]
+    regime = np.select([above & golden, known & ~above & ~golden], ["up", "down"], "mixed")
+    return pd.Series(regime, index=btc.index)
+
+
 def classify(score: float, cfg: dict) -> str:
     s = cfg["signals"]
     if score >= s["strong_buy_threshold"]:
