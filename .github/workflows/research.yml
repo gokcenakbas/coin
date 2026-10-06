@@ -22,6 +22,8 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
+      - name: Hızlı hareket öncü izleri
+        run: python tools/research/fastmoves.py
       - name: Piyasa rejimi analizi
         run: python tools/research/regime.py
       - name: Araştırmayı çalıştır
