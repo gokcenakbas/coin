@@ -1,13 +1,11 @@
 # Kâğıt üzerinde (sanal 1000 $) işlem deneyi. Gerçek Binance fiyatları, sabit kurallar (cointracker/papertrade.py).
 #   replay : geçmiş 24 saati aynı kurallarla prova eder (paper/prova.md)
 #   start  : bir sonraki 15 dakikadan itibaren 24 saatlik deneyi başlatır
-#   step   : deneyi şimdiye kadar ilerletir (zamanlanmış olarak 20 dakikada bir çalışır)
+#   step   : deneyi şimdiye kadar ilerletir (elle çalıştırılır)
 # Rapor her çalıştırmanın özet sayfasında ve "paper-..." artifact'ında.
 name: papertrade
 
 on:
-  schedule:
-    - cron: "*/20 * * * *"
   workflow_dispatch:
     inputs:
       command:
