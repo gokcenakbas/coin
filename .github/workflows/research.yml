@@ -22,6 +22,8 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
+      - name: Alım + satış kuralları
+        run: python tools/research/entryexit.py
       - name: GÜÇLÜ AL incelemesi
         run: python tools/research/strongbuy.py
       - name: Hızlı hareket öncü izleri
