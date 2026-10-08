@@ -47,9 +47,20 @@ def entries(df: pd.DataFrame, btc_up: pd.Series) -> dict[str, pd.Series]:
     trend = (df["close"] > df["sma200"]) & (df["sma50"] > df["sma200"]) & up
     brk = trend & (df["close"] >= df["close"].rolling(20).max())
     brk_new = brk & ~brk.shift(1, fill_value=False)
+    # Sinyalden sonraki 3 gün içinde, açılış alım bölgesindeyse (kırılım seviyesi .. kapanış + 0,5 ATR) al
+    level = df["close"].shift(1).rolling(19).max()
+    zone_hi = df["close"] + 0.5 * df["atr"]
+    late = pd.Series(False, index=df.index)
+    sig_idx = np.flatnonzero(brk_new.to_numpy())
+    o = df["open"].to_numpy()
+    for i in sig_idx:
+        for k in range(i + 1, min(i + 4, len(df))):
+            if level.iat[i] <= o[k] <= zone_hi.iat[i]:
+                late.iat[k - 1] = True  # run_exit k-1+1 = k açılışında alır
+                break
     rand = pd.Series(np.arange(len(df)) % 5 == 0, index=df.index) & df["sma200"].notna()
     return {"GÜÇLÜ AL": sb_new, "GÜÇLÜ AL + BTC yukarı": sb_new & up,
-            "Trend kırılımı": brk_new, "Rastgele": rand}
+            "Trend kırılımı": brk_new, "Kırılım, 3 gün içinde bölgede": late, "Rastgele": rand}
 
 
 def run_exit(df, i, kind, cfg):
@@ -144,7 +155,7 @@ def main() -> None:
 
     head = f"{'işlem':>5} {'başarı':>6} {'ort.':>7} {'medyan':>7} {'PF':>5} {'en kötü':>7} {'süre':>6}"
     print(f"{'alım':>22} | {'satış':>14} | EĞİTİM: {head} | TEST: {head}")
-    for ename in ["GÜÇLÜ AL", "GÜÇLÜ AL + BTC yukarı", "Trend kırılımı", "Rastgele"]:
+    for ename in ["GÜÇLÜ AL", "GÜÇLÜ AL + BTC yukarı", "Trend kırılımı", "Kırılım, 3 gün içinde bölgede", "Rastgele"]:
         for x in EXITS:
             d = data[(data["entry"] == ename) & (data["exit"] == x)]
             if d.empty:
@@ -155,8 +166,8 @@ def main() -> None:
 
     # Yıllara göre kararlılık: en iyi görünen kombinasyonlar
     print("Yıllara göre ortalama getiri (işlem başına):")
-    for ename in ["GÜÇLÜ AL", "Trend kırılımı", "Rastgele"]:
-        for x in ["İz süren 3 ATR", "50G ort. altı"]:
+    for ename in ["Trend kırılımı", "Kırılım, 3 gün içinde bölgede", "Rastgele"]:
+        for x in ["20G ort. altı", "İz süren 3 ATR"]:
             d = data[(data["entry"] == ename) & (data["exit"] == x)]
             by = d.groupby(d["date"].dt.year)["ret"].agg(["count", "mean"])
             cells = "  ".join(f"{y}: {m * 100:+.1f}% ({c})" for y, (c, m) in by.iterrows())
