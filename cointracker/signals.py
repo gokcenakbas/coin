@@ -136,7 +136,7 @@ class Signal:
 
     @property
     def is_buy(self) -> bool:
-        return self.level == "STRONG_BUY"
+        return self.level in ("STRONG_BUY", "BUY")
 
     @property
     def is_sell(self) -> bool:

@@ -247,3 +247,21 @@ def test_positions_and_sell_notification(app):
     assert payload["watch"]["positions"][0]["status"]["action"] == st["action"]
     app.watch.apply({"action": "remove_position", "id": app.watch.positions()[0]["id"]}, "USDT")
     assert app.watch.positions() == []
+
+
+def test_take_profit_notification_once(app, monkeypatch):
+    price = app.results["AAAUSDT"].signal.setup["price"]
+    monkeypatch.setattr(app, "position_status", lambda pos: {"action": "TUT", "price": price, "exit_level": None})
+    # Kâr alma yeri fiyatın altında kalmış bir pozisyon (alış 0,8×, hedef 0,9×)
+    app.watch.apply({"action": "add_position", "symbol": "AAA", "entry": price * 0.8, "stop": price * 0.5,
+                     "target": price * 0.9}, "USDT")
+    pos = app.watch.positions()[0]
+    assert app.take_profit_target(pos) == pytest.approx(price * 0.9)
+    app._check_positions()
+    app._check_positions()
+    assert sum("kâr alma yerine geldi" in t for t, _ in app.sent) == 1
+    assert app.watch.positions()[0]["tp_notified"] is True
+    # hedef alıştan düşükse kaydedilmez
+    app.watch.apply({"action": "add_position", "symbol": "AAA", "entry": price, "stop": price * 0.5,
+                     "target": price * 0.9}, "USDT")
+    assert app.watch.positions()[0]["target"] is None

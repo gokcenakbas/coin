@@ -16,21 +16,43 @@ def base_series(n_trend=640, flat=40):
     return np.concatenate([rise, side])
 
 
+def resistance_series():
+    """Yükseliş, 103'te tepe (direnç), geri çekilme, 97 civarında yatay bant."""
+    rise = np.linspace(50, 100, 580)
+    peak = np.linspace(100, 103, 15)
+    down = np.linspace(102.5, 96, 25)
+    side = 97 + np.sin(np.arange(40)) * 0.6
+    return np.concatenate([rise, peak, down, side])
+
+
 def frame(prices, btc=UP_BTC):
     return trend_frame(make_ohlcv(prices), btc)
 
 
-def test_breakout_in_uptrend_is_strong_buy_with_levels():
-    prices = np.append(base_series(), 104.0)  # son gün 20 günün zirvesi
+def test_breakout_without_resistance_is_buy_with_levels():
+    prices = np.append(base_series(), 104.0)  # son gün 20 günün zirvesi; önünde 1 yıllık direnç yok
     tf = frame(prices)
     st = setup(tf)
     assert tf["entry_sig"].iloc[-1]
-    assert st["state"] == "BUY" and st["level"] == "STRONG_BUY" and st["label"] == "GÜÇLÜ AL"
-    assert all(c["ok"] for c in st["conditions"])
+    assert st["state"] == "BUY" and st["level"] == "BUY" and st["label"] == "AL"
+    assert all(c["ok"] for c in st["conditions"][:4]) and not st["conditions"][4]["ok"]
+    assert st["signal"]["resistance"] is None
     assert st["buy_low"] < st["price"] <= st["buy_high"]
     assert st["buy_low"] == tf["close"].iloc[-20:-1].max()  # kırılım seviyesi = önceki 19 günün zirvesi
     assert np.isclose(st["stop"], st["price"] - 2 * tf["atr"].iloc[-1])
     assert np.isclose(st["exit_level"], tf["close"].iloc[-20:].mean())
+
+
+def test_breaking_a_one_year_resistance_is_strong_buy():
+    prices = np.append(resistance_series(), 106.0)  # 103-104 civarındaki eski tepe kırıldı
+    st = setup(frame(prices))
+    assert st["state"] == "BUY" and st["level"] == "STRONG_BUY" and st["label"] == "GÜÇLÜ AL"
+    assert all(c["ok"] for c in st["conditions"])
+    assert 103 < st["signal"]["resistance"] < 105
+    assert "direnci kırıldı" in st["summary"]
+    # direnç kırılmadan (102'de) kapanış 20 günün zirvesi olsa da yalnızca AL
+    weak = setup(frame(np.append(resistance_series(), 99.5)))
+    assert weak["level"] == "BUY" and weak["signal"]["resistance"] is None
 
 
 def test_no_buy_when_bitcoin_is_below_its_200_day_average():
@@ -85,14 +107,15 @@ def test_rule_trades_enter_next_open_and_exit_below_average():
 
 
 def test_analyze_uses_the_trend_rule(cfg):
-    prices = np.append(base_series(), 104.0)
+    prices = np.append(resistance_series(), 106.0)
     sig = analyze("X", make_ohlcv(prices), cfg, market=UP_BTC)
     assert sig.level == "STRONG_BUY" and sig.label == "GÜÇLÜ AL" and sig.is_buy
+    assert sig.plan["supports"] and all(s["price"] < 106 for s in sig.plan["supports"])
     p = sig.plan
     assert p["action"] == "AL" and p["in_buy_zone"] and p["summary"].startswith("GÜÇLÜ AL")
-    assert p["stop"] < p["buy_low"] < p["buy_high"] and sig.stop_loss == p["stop"]
+    assert p["stop"] < p["price"] and p["buy_low"] < p["buy_high"] and sig.stop_loss == p["stop"]
     no_market = analyze("X", make_ohlcv(prices), cfg)
-    assert no_market.level != "STRONG_BUY"  # BTC verisi yoksa yeni alım önerilmez
+    assert no_market.level not in ("STRONG_BUY", "BUY")  # BTC verisi yoksa yeni alım önerilmez
 
 
 def test_fixed_stop_two_atr_below_entry():
@@ -109,9 +132,9 @@ def test_todays_unfinished_candle_does_not_create_a_signal(cfg):
     start = today - pd.Timedelta(days=len(prices) - 1)
     btc = make_ohlcv(np.linspace(100, 300, len(prices)), start=start)
     sig = analyze("X", make_ohlcv(prices, start=start), cfg, market=btc)
-    assert sig.level != "STRONG_BUY"  # kırılım yalnızca bugünün (kapanmamış) mumunda
+    assert sig.level not in ("STRONG_BUY", "BUY")  # kırılım yalnızca bugünün (kapanmamış) mumunda
     assert sig.plan["as_of"] == today - pd.Timedelta(days=1) and sig.plan["price"] == 104.0
     # aynı veri bir gün sonra (mum kapanmış) GÜÇLÜ AL verir
     shifted = analyze("X", make_ohlcv(prices, start=start - pd.Timedelta(days=1)), cfg,
                       market=make_ohlcv(np.linspace(100, 300, len(prices)), start=start - pd.Timedelta(days=1)))
-    assert shifted.level == "STRONG_BUY"
+    assert shifted.level == "BUY"

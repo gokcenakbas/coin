@@ -176,7 +176,7 @@ mumlarını izler: bir dakikadaki hacim normalin 5 katını aşar ve fiyat aynı
 Eski teknik puanın GÜÇLÜ AL sinyali gerçek veride rastgele alımdan iyi çıkmadı (aşağıda). Bu yüzden asıl sinyal,
 `tools/research/entryexit.py` ve `breakout.py` ile test edilen şu kurala çevrildi (`cointracker/trend.py`):
 
-**AL (GÜÇLÜ AL)** — dördü birden, günlük **kapanışa** göre:
+**AL** — dördü birden, günlük **kapanışa** göre:
 1. coin 200 günlük ortalamanın üstünde,
 2. 50 günlük ortalama 200 günlük ortalamanın üstünde,
 3. **Bitcoin** 200 günlük ortalamanın üstünde (piyasa yükselişte; değilse yeni alım yok),
@@ -185,8 +185,32 @@ Eski teknik puanın GÜÇLÜ AL sinyali gerçek veride rastgele alımdan iyi ç�
 Alım bölgesi: kırılım seviyesi (önceki 19 günün zirvesi) … sinyal kapanışı + 0,5 ATR; sinyal **3 gün** geçerli.
 Fiyat bölgenin üstündeyse kovalanmaz (TRENDDE gösterilir).
 
+**GÜÇLÜ AL** — AL'ın koşullarına ek olarak kırılımda **son 1 yılın bir direnci** (dönüş noktalarından bulunan
+destek/direnç seviyesi, `levels.support_resistance`) geçildiyse. Kırılan direnç yeni destek olur; alım bölgesinin alt
+sınırı odur. `tools/research/takeprofit.py` ile ölçüldü (aynı kırılımlar, ertesi açılışta alış, 20G satış kuralı):
+
+| | Eğitim işlem | Eğitim ort. | Test işlem | Test ort. | Test PF |
+|---|---|---|---|---|---|
+| GÜÇLÜ AL (direnç kırıldı) | 176 | **+%10,2** | 142 | **+%27,6** | 5,11 |
+| AL (yalnızca 20 günlük zirve) | 391 | +%7,4 | 229 | +%5,6 | – |
+
+Destekte (kırılan seviyeye geri çekilmede) limitle almak karışık sonuç verdi (eğitim +%7,6, test +%17,8; ertesi açılış
++%8,3 / +%14,0), bu yüzden alım bölgesi değiştirilmedi.
+
+**Kâr alma yerleri** = fiyatın üstündeki 1 yıllık dirençler (uygulamada ve grafikte gösterilir; pozisyon kaydettiyseniz
+alışın en az 1 ATR üstündeki ilk dirence gelince 🎯 bildirimi gelir). Ölçüm:
+
+| Satış | Eğitim başarı / ort. | Test başarı / ort. |
+|---|---|---|
+| Tamamı kuralla (20G ort. altı) | %37 / **+%8,3** | %30 / **+%14,0** |
+| Yarısı ilk dirençte, kalanı kuralla | %45 / +%4,6 | %40 / +%6,7 |
+| Tamamı ilk dirençte | %53 / +%0,6 | %52 / +%0,2 |
+
+Yani dirençte kısmi satış daha sık kazandırır ama toplam kârı yarıya indirir; tamamını dirençte satmak kârı neredeyse
+sıfırlar. En yüksek kâr tamamını kurala bırakmakta; daha az dalgalı yol yarısını dirençte satmak.
+
 **SAT:** günlük kapanış **20 günlük ortalamanın altına** inerse ertesi gün; ayrıca alış fiyatının **2 ATR altı**
-zarar-durdur. Hedef fiyat yoktur, trend sürdükçe tutulur. Uygulamada "✅ Aldım" ile alış fiyatınızı kaydederseniz
+zarar-durdur. Trend sürdükçe tutulur. Uygulamada "✅ Aldım" ile alış fiyatınızı kaydederseniz
 satış kuralı tetiklendiğinde Mac bildirimi gelir (💼 Pozisyonlarım).
 
 Gerçek veriyle ölçüm (Ekim 2026, 32 büyük coin, komisyon+kayma her yön %0,15, sinyalin ertesi günü açılışta alış):

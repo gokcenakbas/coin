@@ -132,12 +132,16 @@ class WatchStore:
                 entry, stop = float(body["entry"]), float(body["stop"])
                 qty = body.get("qty")
                 qty = None if qty in (None, "") else float(qty)
+                target = body.get("target")
+                target = None if target in (None, "") else float(target)
+                if target is not None and not (math.isfinite(target) and target > entry):
+                    target = None
                 if not (math.isfinite(entry) and entry > 0 and math.isfinite(stop) and 0 < stop < entry) or \
                         (qty is not None and not (math.isfinite(qty) and qty > 0)):
                     raise ValueError("geçersiz pozisyon")
                 self.data["positions"] = [p for p in self.data["positions"] if p["symbol"] != sym]
                 self.data["positions"].append({
-                    "id": uuid.uuid4().hex[:12], "symbol": sym, "entry": entry, "stop": stop, "qty": qty,
+                    "id": uuid.uuid4().hex[:12], "symbol": sym, "entry": entry, "stop": stop, "qty": qty, "target": target,
                     "opened": datetime.now(timezone.utc).isoformat(), "notified": None,
                 })
             elif action == "remove_position":
@@ -145,7 +149,14 @@ class WatchStore:
             elif action == "mark_position":
                 for p in self.data["positions"]:
                     if p["id"] == body.get("id"):
-                        p["notified"] = str(body.get("notified") or "")[:40] or None
+                        if "notified" in body:
+                            p["notified"] = str(body.get("notified") or "")[:40] or None
+                        if body.get("target") is not None:
+                            t = float(body["target"])
+                            if math.isfinite(t) and t > p["entry"]:
+                                p["target"] = t
+                        if "tp_notified" in body:
+                            p["tp_notified"] = bool(body["tp_notified"])
             else:
                 raise ValueError("bilinmeyen işlem")
             self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -312,10 +323,33 @@ class DashboardApp:
         return {"action": "TUT", "reason": f"kapanış {exit_level:g} (20G ort.) altına inerse sat" if exit_level else "",
                 "price": price, "exit_level": exit_level}
 
+    def take_profit_target(self, pos: dict) -> float | None:
+        """Pozisyonun kâr alma yeri: alışın en az 1 ATR üstündeki ilk 1 yıllık direnç (araştırmadaki gibi)."""
+        if pos.get("target"):
+            return pos["target"]
+        with self.lock:
+            r = self.results.get(pos["symbol"])
+        plan = r.signal.plan if r is not None else None
+        if not plan or not plan.get("atr"):
+            return None
+        above = [lv["price"] for lv in plan.get("resistances", []) if lv["price"] >= pos["entry"] + plan["atr"]]
+        return above[0] if above else None
+
     def _check_positions(self) -> None:
-        """Elimdeki coinlerde satış kuralı tetiklendiyse bir kez bildirim gönderir."""
+        """Elimdeki coinlerde satış kuralı tetiklendiyse ya da kâr alma yerine gelindiyse bir kez bildirim gönderir."""
         for pos in self.watch.positions():
             status = self.position_status(pos)
+            target = self.take_profit_target(pos)
+            if target and not pos.get("target"):
+                self.watch.apply({"action": "mark_position", "id": pos["id"], "target": target}, self.quote)
+            if target and status.get("price") and status["price"] >= target and not pos.get("tp_notified") \
+                    and status.get("action") != "SAT":
+                base = base_asset(pos["symbol"], self.quote)
+                pnl = status["price"] / pos["entry"] - 1
+                self.notify(f"🎯 {base}: kâr alma yerine geldi ({target:g})",
+                            f"Şu an {status['price']:g} ({pnl * 100:+.1f}%). İsterseniz yarısını satın, kalanını satış "
+                            f"kuralına bırakın (kapanış 20G ort. altına inince).")
+                self.watch.apply({"action": "mark_position", "id": pos["id"], "tp_notified": True}, self.quote)
             if status.get("action") == "SAT":
                 key = f"SAT:{status['price']:g}"
                 if pos.get("notified") != key:
@@ -384,11 +418,12 @@ class DashboardApp:
             level, label = ("NODATA", "Yeni coin") if sym in no_data else ("PENDING", "Hazırlanıyor")
             items.append({"symbol": sym, "base": base_asset(sym, self.quote), "price": None, "score": None,
                           "level": level, "label": label})
-        order = {"STRONG_BUY": 0, "TREND": 1, "SELL": 2, "HOLD": 3}
+        order = {"STRONG_BUY": 0, "BUY": 1, "TREND": 2, "SELL": 3, "HOLD": 4}
         items.sort(key=lambda i: (order.get(i["level"], 9), i.get("signal_days_ago") or 0, i["base"]))
         watch = self.watch.snapshot()
         for pos in watch.get("positions", []):
             pos["status"] = self.position_status(pos)
+            pos["tp"] = self.take_profit_target(pos)
         return clean({"status": status, "items": items, "watch": watch})
 
     def coin_payload(self, symbol: str) -> dict:

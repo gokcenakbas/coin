@@ -48,7 +48,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "fee": 0.001,
     },
     "alerts": {
-        "levels": ["STRONG_BUY", "SELL"],
+        "levels": ["STRONG_BUY", "BUY", "SELL"],
         "telegram": {"enabled": False, "bot_token": "", "chat_id": ""},
         "webhook": {"enabled": False, "url": ""},
         # Örnek: [{"coin": "BTC", "above": 150000}, {"coin": "ETH", "below": 2000}]

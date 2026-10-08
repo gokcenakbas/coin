@@ -11,11 +11,17 @@ AL (GÜÇLÜ AL) — dördü birden:
   4. günlük kapanış son 20 günün en yükseği (kırılım; sinyal o günün kapanışında oluşur)
   Alım bölgesi: kırılım seviyesi (önceki 19 günün en yüksek kapanışı) … sinyal kapanışı + 0,5 ATR;
   sinyal 3 gün geçerli. Fiyat bölgenin üstündeyse kovalanmaz.
+  Kırılan seviyenin yakınında (±1 ATR) son 1 yılın bir direnci varsa (dönüş noktalarından; bkz.
+  levels.support_resistance) GÜÇLÜ AL, yoksa AL. Testte direnç kıran kırılımlar belirgin şekilde daha iyiydi
+  (tools/research/takeprofit.py).
 SAT:
   * günlük kapanış 20 günlük ortalamanın altına inerse ertesi gün sat
   * başlangıç zarar-durdur: alış fiyatı − 2 ATR (gün içinde dokunursa sat)
 
-Seviye kodları (arayüz ve bildirimler): STRONG_BUY = GÜÇLÜ AL, TREND = trendde (elindeyse tut, yeni
+Kâr alma: üstteki dirençler gösterilir. Testte yarısını ilk dirençte satmak kazanma oranını artırdı ama
+işlem başına ortalama kârı yaklaşık yarıya indirdi; tamamını dirençte satmak kârın neredeyse tamamını kaçırdı.
+
+Seviye kodları (arayüz ve bildirimler): STRONG_BUY = GÜÇLÜ AL, BUY = AL (kırılım, direnç yok), TREND = trendde (elindeyse tut, yeni
 alım yok), HOLD = BEKLE, SELL = SAT (elindeyse).
 """
 
@@ -25,6 +31,7 @@ import numpy as np
 import pandas as pd
 
 from cointracker.indicators import add_indicators
+from cointracker.levels import support_resistance
 
 BREAKOUT_DAYS = 20
 EXIT_MA_DAYS = 20
@@ -33,7 +40,7 @@ ZONE_ATR = 0.5
 STOP_ATR = 2.0
 FEE = 0.0015  # komisyon + kayma, her yön (araştırmadakiyle aynı)
 
-LEVEL_LABELS = {"STRONG_BUY": "GÜÇLÜ AL", "TREND": "TRENDDE", "HOLD": "BEKLE", "SELL": "SAT"}
+LEVEL_LABELS = {"STRONG_BUY": "GÜÇLÜ AL", "BUY": "AL", "TREND": "TRENDDE", "HOLD": "BEKLE", "SELL": "SAT"}
 
 # Araştırmada ölçülen sonuçlar (Ekim 2026; tools/research/entryexit.py ve breakout.py çıktıları).
 MEASURED = {
@@ -45,6 +52,14 @@ MEASURED = {
     "random": {"train_avg": 0.011, "test_avg": 0.027, "train_pf": 1.35, "test_pf": 1.84},
     "portfolio10": {"train_return": 2.342, "train_dd": -0.343, "test_return": 3.138, "test_dd": -0.415},
     "btc_hold": {"train_return": 0.152, "train_dd": -0.766, "test_return": 0.335, "test_dd": -0.530},
+    # tools/research/takeprofit.py (Ekim 2026): aynı kırılımlar, kırılan seviyede 1 yıllık direnç olan/olmayan
+    "strong": {"train_trades": 176, "train_avg": 0.102, "train_win": 0.392, "train_pf": 2.85,
+               "test_trades": 142, "test_avg": 0.276, "test_win": 0.324, "test_pf": 5.11},
+    "plain": {"train_trades": 391, "train_avg": 0.074, "test_trades": 229, "test_avg": 0.056},
+    # kâr alma: hepsi kural (20G) / yarısı ilk dirençte / tamamı ilk dirençte
+    "tp": {"rule": {"train_avg": 0.083, "train_win": 0.374, "test_avg": 0.140, "test_win": 0.299},
+           "half_r1": {"train_avg": 0.046, "train_win": 0.453, "test_avg": 0.067, "test_win": 0.402},
+           "all_r1": {"train_avg": 0.006, "train_win": 0.533, "test_avg": 0.002, "test_win": 0.520}},
 }
 
 
@@ -86,6 +101,18 @@ def trend_frame(df: pd.DataFrame, btc: pd.DataFrame | None) -> pd.DataFrame:
     return out
 
 
+def broken_resistance(tf: pd.DataFrame, t) -> float | None:
+    """t günündeki kırılımın geçtiği son 1 yıllık direnç (yoksa None). Yalnızca t'den önceki veri kullanılır."""
+    i = tf.index.get_loc(t)
+    row = tf.iloc[i]
+    atr, level = row["atr"], row["brk_level"]
+    if i < 30 or not pd.notna(atr) or not pd.notna(level):
+        return None
+    _, res = support_resistance(tf.iloc[:i], float(atr), limit=5)
+    hits = [r["price"] for r in res if level - atr <= r["price"] <= row["close"]]
+    return float(max(hits)) if hits else None
+
+
 def setup(tf: pd.DataFrame, price: float | None = None) -> dict:
     """Son güne göre durum, alım bölgesi, zarar-durdur ve satış seviyesi."""
     last = tf.iloc[-1]
@@ -108,8 +135,12 @@ def setup(tf: pd.DataFrame, price: float | None = None) -> dict:
         days_ago = int(len(tf) - 1 - tf.index.get_loc(t))
         zone_low = float(row["brk_level"])
         zone_high = float(row["close"] + ZONE_ATR * row["atr"])
+        res = broken_resistance(tf, t)
         signal = {"date": t, "days_ago": days_ago, "close": float(row["close"]),
-                  "atr": float(row["atr"]), "zone_low": zone_low, "zone_high": zone_high}
+                  "atr": float(row["atr"]), "zone_low": zone_low, "zone_high": zone_high,
+                  "resistance": res, "strong": res is not None}
+        conditions.append({"text": "Kırılımda son 1 yılın bir direnci geçildi (GÜÇLÜ AL; yoksa AL)",
+                           "ok": res is not None})
 
     still_ok = bool(last["in_trend"]) and sma20 is not None and last["close"] >= sma20
     below_exit = sma20 is not None and last["close"] < sma20
@@ -124,7 +155,7 @@ def setup(tf: pd.DataFrame, price: float | None = None) -> dict:
         state = "EXIT"
     else:
         state = "WAIT"
-    level = {"BUY": "STRONG_BUY", "ABOVE_ZONE": "TREND", "TREND": "TREND", "EXIT": "SELL", "WAIT": "HOLD"}[state]
+    level = {"BUY": "STRONG_BUY" if signal and signal["strong"] else "BUY", "ABOVE_ZONE": "TREND", "TREND": "TREND", "EXIT": "SELL", "WAIT": "HOLD"}[state]
 
     stop_atr = signal["atr"] if signal else atr
     stop = price - STOP_ATR * stop_atr if stop_atr else None
@@ -134,7 +165,9 @@ def setup(tf: pd.DataFrame, price: float | None = None) -> dict:
     fmt = _fmt_tr
     if state == "BUY":
         when = f"{signal['days_ago']} gün önceki kapanışta" if signal["days_ago"] else "son günlük kapanışta"
-        summary = (f"GÜÇLÜ AL: {when} kırılım oldu ve fiyat "
+        what = (f"{when} son 1 yılın {fmt(signal['resistance'])} direnci kırıldı" if signal["strong"]
+                else f"{when} 20 günlük zirve kırıldı (geçilen 1 yıllık direnç yok)")
+        summary = (f"{LEVEL_LABELS[level]}: {what} ve fiyat "
                    f"alım bölgesinde ({fmt(buy_low)} – {fmt(buy_high)}). Alırsanız zarar-durdur ≈ {fmt(stop)}; "
                    f"günlük kapanış 20 günlük ortalamanın (şu an {fmt(sma20)}) altına inerse ertesi gün satın.")
     elif state == "ABOVE_ZONE":

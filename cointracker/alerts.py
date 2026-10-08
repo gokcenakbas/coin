@@ -106,6 +106,9 @@ def format_signal(sig: Signal, quotes: list[Quote] | None = None, detailed: bool
                          f"(20G ort.) altına inerse")
         elif plan.get("exit_level") is not None:
             lines.append(f"   Satış seviyesi: kapanış {fmt_price(plan['exit_level'])} (20G ort.) altına inerse")
+        if plan.get("resistances"):
+            lines.append("   Kâr alma yerleri (direnç): " + ", ".join(fmt_price(r["price"]) for r in plan["resistances"][:2])
+                         + " — isterseniz yarısını ilk dirençte satın")
     if detailed:
         if plan:
             lines += [f"  {'✓' if c['ok'] else '✗'} {c['text']}" for c in plan["conditions"]]

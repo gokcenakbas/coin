@@ -151,7 +151,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:4px 16px 20px
   <section class="card" id="listCard">
     <div class="toolbar">
       <button data-filter="all" class="active">Tümü</button>
-      <button data-filter="buy">GÜÇLÜ AL</button>
+      <button data-filter="buy">GÜÇLÜ AL / AL</button>
       <button data-filter="trend">Trendde</button>
       <button data-filter="sell">SAT</button>
       <button data-filter="pos">💼 Pozisyonlarım</button>
@@ -280,7 +280,7 @@ function renderStatus(s) {
   else if (s.phase === "ready" && s.updated) el.textContent = "Sinyaller: " + new Date(s.updated).toLocaleTimeString("tr-TR", {hour: "2-digit", minute: "2-digit"});
   else el.textContent = "Başlatılıyor…";
   const ready = state.items.filter(i => i.plan).length;
-  const buys = state.items.filter(i => i.level === "STRONG_BUY").length;
+  const buys = state.items.filter(i => i.level === "STRONG_BUY" || i.level === "BUY").length;
   const sells = state.items.filter(i => i.level === "SELL").length;
   $("#counts").innerHTML = `${ready}/${state.items.length} coin · <span class="up">${buys} GÜÇLÜ AL</span> · <span class="down">${sells} SAT</span>`;
 }
@@ -309,18 +309,21 @@ function renderMarket(m) {
 // tools/research/entryexit.py ve breakout.py ile gerçek veride ölçülen sonuçlar (Ekim 2026, 32 coin, 5 yıl)
 const MEASURED = {train: {period: "Eki 2021 – Eki 2024", trades: 554, win: 0.375, avg: 0.089, pf: 2.63},
                   test: {period: "Eki 2024 – Eki 2026", trades: 368, win: 0.293, avg: 0.138, pf: 3.16},
-                  random: {train: 0.011, test: 0.027}};
+                  random: {train: 0.011, test: 0.027},
+                  strong: {train: {trades: 176, win: 0.392, avg: 0.102}, test: {trades: 142, win: 0.324, avg: 0.276}}};
 
 function renderReliability(r) {
   const card = $("#relCard"), M = MEASURED;
   card.className = "card"; card.style.display = "block";
   const row = (name, x, rnd) => `<tr><td>${name}</td><td>${x.trades}</td><td>${pctInt(x.win)}</td><td class="up">${fmtPct(x.avg)}</td><td class="muted">${fmtPct(rnd)}</td></tr>`;
   $("#relBody").innerHTML = `
-    <p><b>GÜÇLÜ AL</b> = coin ve Bitcoin 200 günlük ortalamanın üstünde, 50G ort. 200G'nin üstünde ve günlük kapanış son 20 günün zirvesi.
+    <p><b>AL</b> = coin ve Bitcoin 200 günlük ortalamanın üstünde, 50G ort. 200G'nin üstünde ve günlük kapanış son 20 günün zirvesi.
+      <b>GÜÇLÜ AL</b> = aynısı, üstelik kırılımda son 1 yılın bir direnci (destek/direnç seviyesi) geçildi.
       <b>Alım:</b> sinyalden sonraki 3 gün, fiyat alım bölgesindeyse. <b>Satış:</b> günlük kapanış 20 günlük ortalamanın altına inince
       (ertesi gün) ya da alışın 2 ATR altındaki zarar-durdur çalışınca.</p>
     <table><thead><tr><th>Dönem (32 coin)</th><th>İşlem</th><th>Başarı</th><th>İşlem başına ort.</th><th>Rastgele alım</th></tr></thead><tbody>
-      ${row(M.train.period, M.train, M.random.train)}${row(M.test.period + " (test)", M.test, M.random.test)}</tbody></table>
+      ${row(M.train.period + " · tümü", M.train, M.random.train)}${row(M.test.period + " (test) · tümü", M.test, M.random.test)}
+      ${row(M.train.period + " · yalnız GÜÇLÜ AL", M.strong.train, M.random.train)}${row(M.test.period + " (test) · yalnız GÜÇLÜ AL", M.strong.test, M.random.test)}</tbody></table>
     ${r ? `<p class="muted" style="margin:6px 0 0">Bu listedeki ${r.coins} coinde son 5 yıl: ${r.trades} işlem, başarı ${pctInt(r.win_rate)}, işlem başına ort. ${fmtPct(r.avg)}.</p>` : ""}
     <p class="muted" style="margin:6px 0 0">⚠ İşlemlerin çoğu (≈%60-70) küçük zararla kapanır; kâr, az sayıdaki büyük yükselişten gelir. Bu yüzden
       zarar-durduru ve satış kuralını mutlaka uygulayın, her işleme sermayenin küçük bir kısmını ayırın (ör. en fazla 1/10'u).
@@ -333,7 +336,7 @@ function rowValue(item, key) {
   if (key === "chg24") return live ? live.c / live.o - 1 : null;
   if (key === "vol24") return live ? live.q : null;
   if (key === "symbol") return item.symbol;
-  if (key === "levelrank") return {STRONG_BUY: 0, TREND: 1, SELL: 2, HOLD: 3}[item.level] ?? 9;
+  if (key === "levelrank") return {STRONG_BUY: 0, BUY: 1, TREND: 2, SELL: 3, HOLD: 4}[item.level] ?? 9;
   if (key === "rule_avg") return item.rule && item.rule.trades ? item.rule.avg : null;
   if (key === "buy_dist" || key === "exit_dist") {
     if (!item.plan) return null;
@@ -363,11 +366,20 @@ function tgtCell(i) {
 }
 
 function posFor(sym) { return (state.watch.positions || []).find(p => p.symbol === sym); }
+// Kâr alma yeri: alışın en az 1 ATR üstündeki ilk 1 yıllık direnç (araştırmada test edilen kural)
+function tpFor(pos, p) {
+  if (pos.target) return pos.target;
+  if (p && p.atr && p.resistances) {
+    const r = p.resistances.find(lv => lv.price >= pos.entry + p.atr);
+    if (r) return r.price;
+  }
+  return pos.tp || null;
+}
 
 function renderTable() {
   const q = state.search.trim().toUpperCase(), favs = favSet();
   const pass = i => state.filter === "all" || (state.filter === "fav" ? favs.has(i.symbol) :
-    state.filter === "pos" ? !!posFor(i.symbol) : state.filter === "buy" ? i.level === "STRONG_BUY" :
+    state.filter === "pos" ? !!posFor(i.symbol) : state.filter === "buy" ? (i.level === "STRONG_BUY" || i.level === "BUY") :
     state.filter === "trend" ? i.level === "TREND" : i.level === "SELL");
   let items = state.items.filter(i => pass(i) && (!q || i.base.includes(q)));
   const {key, dir} = state.sort;
@@ -385,7 +397,7 @@ function renderTable() {
       <td data-f="price">${fmtPrice(rowValue(i, "price"))}</td>
       <td data-f="chg" class="${cls(chg)}">${fmtPct(chg)}</td>
       <td data-f="vol" class="hide-sm hide-detail">${fmtUsd(rowValue(i, "vol24"))}</td>
-      <td>${posFor(i.symbol) ? "💼 " : ""}<span class="badge b-${i.level}">${esc(i.label)}</span>${i.level === "STRONG_BUY" && i.signal_days_ago != null ? ` <span class="muted">${i.signal_days_ago ? i.signal_days_ago + " g önce" : "yeni"}</span>` : ""}</td>
+      <td>${posFor(i.symbol) ? "💼 " : ""}<span class="badge b-${i.level}">${esc(i.label)}</span>${(i.level === "STRONG_BUY" || i.level === "BUY") && i.signal_days_ago != null ? ` <span class="muted">${i.signal_days_ago ? i.signal_days_ago + " g önce" : "yeni"}</span>` : ""}</td>
       <td class="hide-sm hide-detail">${i.rsi == null ? "-" : i.rsi.toFixed(0)}</td>
       <td class="hide-sm hide-detail">${i.pct_rank_5y == null ? "-" : "%" + (i.pct_rank_5y * 100).toFixed(0)}</td>
       <td class="hide-sm" data-f="buy">${buyCell(i)}</td>
@@ -568,7 +580,15 @@ function checkAlarms(sym, price) {
 // Elimdeki coin zarar-durdurun altına inerse anında haber ver (20G kuralı günlük kapanışta sunucuda kontrol edilir)
 function checkPosition(sym, price) {
   const pos = posFor(sym);
-  if (!pos || state.firedPos.has(pos.id) || price > pos.stop) return;
+  if (!pos) return;
+  const tp = tpFor(pos, state.plan && state.plan.symbol === sym ? state.plan : null);
+  if (tp && price >= tp && !pos.tp_notified && !state.firedPos.has(pos.id + ":tp")) {
+    state.firedPos.add(pos.id + ":tp");
+    const base = (state.bySym[sym] || {}).base || sym;
+    notify(`🎯 ${base}: kâr alma yerine geldi`, `Fiyat ${fmtPrice(price)} (${fmtPct(price / pos.entry - 1)}). İsterseniz yarısını satın, kalanını satış kuralına bırakın.`);
+    watchAction({action: "mark_position", id: pos.id, tp_notified: true, target: tp}).catch(() => {});
+  }
+  if (state.firedPos.has(pos.id) || price > pos.stop) return;
   state.firedPos.add(pos.id);
   const base = (state.bySym[sym] || {}).base || sym;
   notify(`🔴 ${base}: zarar-durdur çalıştı — SAT`, `Fiyat ${fmtPrice(price)}, zarar-durdur ${fmtPrice(pos.stop)} (alış ${fmtPrice(pos.entry)})`);
@@ -644,7 +664,11 @@ function applyPlanLines() {
   (p.resistances || []).slice(0, 2).forEach((r, i) => line(r.price, cssVar("--warn"), `Direnç ${i + 1}`, 1));
   (p.supports || []).slice(0, 1).forEach(r => line(r.price, cssVar("--muted"), "Destek", 1));
   const pos = posFor(p.symbol);
-  if (pos) { line(pos.entry, cssVar("--muted"), "Alışım", 0); line(pos.stop, cssVar("--down"), "Stop"); }
+  if (pos) {
+    line(pos.entry, cssVar("--muted"), "Alışım", 0); line(pos.stop, cssVar("--down"), "Stop");
+    const tp = tpFor(pos, p);
+    if (tp) line(tp, cssVar("--up"), "Kâr al", 0);
+  }
   else if (p.stop != null && p.action === "AL") line(p.stop, cssVar("--down"), "Stop");
 }
 
@@ -778,6 +802,9 @@ function renderPosition(p) {
           ["Şu an", `${fmtPrice(live)} <span class="${cls(pnl)}">${fmtPct(pnl)}</span>${pos.qty ? ` (${fmtPrice((live - pos.entry) * pos.qty)} USDT)` : ""}`],
           ["Zarar-durdur", `${fmtPrice(pos.stop)} <span class="muted">${fmtPct(pos.stop / live - 1)}</span>`],
           ["Satış seviyesi (20G ort.)", exitLv == null ? "-" : `${fmtPrice(exitLv)} <span class="muted">${fmtPct(exitLv / live - 1)}</span>`],
+          ["Kâr alma yeri", (() => { const tp = tpFor(pos, p); return tp
+            ? `${fmtPrice(tp)} <span class="muted">alışa göre ${fmtPct(tp / pos.entry - 1)}${live >= tp ? "" : `, şu andan ${fmtPct(tp / live - 1)}`}</span>${live >= tp ? ` <b class="up">✓ ulaşıldı</b>` : ""}<br><span class="muted">1 yıllık direnç. İsterseniz yarısını burada satın, kalanını satış kuralına bırakın (aşağıdaki nota bakın).</span>`
+            : `<span class="muted">alışınızın üstünde 1 yıllık direnç yok (fiyat zirvede) — kâr, satış seviyesiyle kilitlenir</span>`; })()],
           ["Kâr kilidi", exitLv == null ? "-" : exitLv > pos.entry
             ? `<b class="up">✓ satış seviyesi alışının üstünde: şimdi satış sinyali gelse ≈ ${fmtPct(exitLv / pos.entry - 1)} kârla çıkılır</b>`
             : `<span class="muted">henüz yok — satış seviyesi alışınızın ${fmtPct(exitLv / pos.entry - 1)} altında; her gün yükseldikçe kârı kilitler</span>`],
@@ -789,7 +816,7 @@ function renderPlan(s) {
   const p = s.plan;
   const price = (state.live[state.selected] || {}).c || p.price;
   const dist = v => `<span class="muted">${fmtPct(v / price - 1)}</span>`;
-  const actionLevel = {AL: "STRONG_BUY", TUT: "TREND", SAT: "SELL", BEKLE: "HOLD"}[p.action];
+  const actionLevel = s.level;
   const inZone = p.buy_high != null && price >= p.buy_low && price <= p.buy_high;
   const sg = p.signal;
   return `<section class="card"><h2>Ne zaman alınır, ne zaman satılır?</h2>
@@ -799,11 +826,19 @@ function renderPlan(s) {
       ${p.buy_high != null ? `<div class="lv buy"><span>Alım bölgesi</span><b>${fmtPrice(p.buy_low)} – ${fmtPrice(p.buy_high)}</b> ${inZone ? `<span class="zone-in" style="text-transform:none">✓ fiyat bölgede</span>` : dist(price > p.buy_high ? p.buy_high : p.buy_low)}</div>` : ""}
       ${sg ? `<div class="lv"><span>Sinyal günü</span><b>${trDate(sg.date)}</b> <span class="muted">${sg.days_ago ? sg.days_ago + " gün önce · 3 gün geçerli" : "dün kapanışta · 3 gün geçerli"}</span></div>` : ""}
       ${p.exit_level != null ? `<div class="lv tgt"><span>Satış seviyesi (20G ort.)</span><b>${fmtPrice(p.exit_level)}</b> ${dist(p.exit_level)}</div>` : ""}
+      ${(p.resistances || []).slice(0, 2).map((r, i) => `<div class="lv tgt"><span>Kâr alma yeri ${i + 1} (direnç)</span><b>${fmtPrice(r.price)}</b> ${dist(r.price)} <span class="muted">${r.touches}× dokunuldu</span></div>`).join("")}
+      ${(p.resistances || []).length ? "" : `<div class="lv tgt"><span>Kâr alma yeri</span><b>-</b> <span class="muted">üstte 1 yıllık direnç yok (fiyat zirvede)</span></div>`}
+      ${(p.supports || []).slice(0, 1).map(r => `<div class="lv"><span>En yakın destek</span><b>${fmtPrice(r.price)}</b> ${dist(r.price)}</div>`).join("")}
       ${p.action === "AL" && p.stop ? `<div class="lv stop"><span>Zarar-durdur (şimdi alırsanız)</span><b>${fmtPrice(p.stop)}</b> ${dist(p.stop)}</div>` : ""}
     </div>
     <p class="muted" style="margin:8px 0 0"><b>Satış kuralı:</b> günlük kapanış 20 günlük ortalamanın altına inerse ertesi gün satın; fiyat alışın 2 ATR altına
-      (zarar-durdur) inerse hemen satın. <b>Sabit kâr-al hedefi yok:</b> testte sabit hedefle satmak kârın çoğunu kaçırdı
-      (işlem başına ort. +%0,2–1 yerine +%9–14); kâr, her gün yükselen satış seviyesiyle kilitlenir. Sinyaller ${trDate(p.as_of)} günlük kapanışına göredir.</p>
+      (zarar-durdur) inerse hemen satın.<br>
+      <b>Destek/direnç:</b> kırılım son 1 yılın bir direncini geçtiyse <b>GÜÇLÜ AL</b>, yalnızca 20 günlük zirveyse <b>AL</b>
+      (5 yıllık testte işlem başına ort. GÜÇLÜ AL +%10 / +%28, AL +%7 / +%6; eğitim / test). Kırılan direnç yeni destek olur: alım bölgesinin alt sınırı odur.<br>
+      <b>Kâr alma yerleri</b> üstteki dirençlerdir. Testte <i>yarısını ilk dirençte satıp kalanı kurala bırakmak</i> kazanan işlem oranını
+      %30–37'den %40–45'e çıkardı ama ortalama kârı yaklaşık yarıya indirdi (+%8 / +%14 yerine +%5 / +%7); <i>tamamını</i> dirençte satmak
+      kârın neredeyse hepsini kaçırdı (+%0,2–0,6). Yani en çok kazandıran: tamamını kurala bırakmak; daha az dalgalı yol: yarısını dirençte satmak.
+      Sinyaller ${trDate(p.as_of)} günlük kapanışına göredir.</p>
     ${renderPosition(p)}
     <div id="pos">
       <h2 style="margin-bottom:8px">Ne kadar alınmalı?</h2>
@@ -1023,7 +1058,8 @@ $("#detailBody").onclick = e => {
   if (add) {
     const entry = parseNum($("#posEntry").value), qty = parseNum($("#posQty").value), atr = parseFloat(add.dataset.atr);
     if (!(entry > 0) || !(atr > 0) || entry - 2 * atr <= 0) { toast("Geçersiz alış fiyatı", "Lütfen alış fiyatınızı yazın, ör. 65000 veya 0,52"); return; }
-    watchAction({action: "add_position", symbol: state.selected, entry, qty, stop: entry - 2 * atr})
+    const tp = state.plan ? tpFor({entry}, state.plan) : null;
+    watchAction({action: "add_position", symbol: state.selected, entry, qty, stop: entry - 2 * atr, target: tp})
       .then(() => { toast("Pozisyon kaydedildi", "Satış zamanı gelince haber vereceğim."); loadDetail(); applyPlanLines(); })
       .catch(err => toast("Hata", err.message));
     return;
