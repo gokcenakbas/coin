@@ -776,6 +776,9 @@ function renderPosition(p) {
           ["Şu an", `${fmtPrice(live)} <span class="${cls(pnl)}">${fmtPct(pnl)}</span>${pos.qty ? ` (${fmtPrice((live - pos.entry) * pos.qty)} USDT)` : ""}`],
           ["Zarar-durdur", `${fmtPrice(pos.stop)} <span class="muted">${fmtPct(pos.stop / live - 1)}</span>`],
           ["Satış seviyesi (20G ort.)", exitLv == null ? "-" : `${fmtPrice(exitLv)} <span class="muted">${fmtPct(exitLv / live - 1)}</span>`],
+          ["Kâr kilidi", exitLv == null ? "-" : exitLv > pos.entry
+            ? `<b class="up">✓ satış seviyesi alışının üstünde: şimdi satış sinyali gelse ≈ ${fmtPct(exitLv / pos.entry - 1)} kârla çıkılır</b>`
+            : `<span class="muted">henüz yok — satış seviyesi alışınızın ${fmtPct(exitLv / pos.entry - 1)} altında; her gün yükseldikçe kârı kilitler</span>`],
           ["Kayıt", trDate(pos.opened)]])}
     <div class="plan-btns"><button data-posdel="${esc(pos.id)}">${sell ? "✓ Sattım, kaydı sil" : "✕ Pozisyonu sil"}</button></div></div>`;
 }
@@ -797,7 +800,8 @@ function renderPlan(s) {
       ${p.action === "AL" && p.stop ? `<div class="lv stop"><span>Zarar-durdur (şimdi alırsanız)</span><b>${fmtPrice(p.stop)}</b> ${dist(p.stop)}</div>` : ""}
     </div>
     <p class="muted" style="margin:8px 0 0"><b>Satış kuralı:</b> günlük kapanış 20 günlük ortalamanın altına inerse ertesi gün satın; fiyat alışın 2 ATR altına
-      (zarar-durdur) inerse hemen satın. Hedef fiyat yok — trend sürdükçe pozisyon tutulur. Sinyaller ${trDate(p.as_of)} günlük kapanışına göredir.</p>
+      (zarar-durdur) inerse hemen satın. <b>Sabit kâr-al hedefi yok:</b> testte sabit hedefle satmak kârın çoğunu kaçırdı
+      (işlem başına ort. +%0,2–1 yerine +%9–14); kâr, her gün yükselen satış seviyesiyle kilitlenir. Sinyaller ${trDate(p.as_of)} günlük kapanışına göredir.</p>
     ${renderPosition(p)}
     <div id="pos">
       <h2 style="margin-bottom:8px">Ne kadar alınmalı?</h2>
