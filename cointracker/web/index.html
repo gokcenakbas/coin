@@ -641,6 +641,8 @@ function applyPlanLines() {
     {price, color, lineWidth: 1, lineStyle: style, axisLabelVisible: true, title}));
   if (p.buy_high != null) { line(p.buy_high, cssVar("--up"), "Alım bölgesi"); line(p.buy_low, cssVar("--up"), ""); }
   if (p.exit_level != null) line(p.exit_level, cssVar("--accent"), "Satış (20G ort.)");
+  (p.resistances || []).slice(0, 2).forEach((r, i) => line(r.price, cssVar("--warn"), `Direnç ${i + 1}`, 1));
+  (p.supports || []).slice(0, 1).forEach(r => line(r.price, cssVar("--muted"), "Destek", 1));
   const pos = posFor(p.symbol);
   if (pos) { line(pos.entry, cssVar("--muted"), "Alışım", 0); line(pos.stop, cssVar("--down"), "Stop"); }
   else if (p.stop != null && p.action === "AL") line(p.stop, cssVar("--down"), "Stop");

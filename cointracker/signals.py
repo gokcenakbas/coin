@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 
 from cointracker.indicators import add_indicators
+from cointracker.levels import support_resistance
 from cointracker.trend import rule_stats, rule_trades, setup as trend_setup, trend_frame
 
 LEVELS = ["STRONG_SELL", "SELL", "HOLD", "BUY", "TREND", "STRONG_BUY"]
@@ -289,6 +290,9 @@ def analyze(symbol: str, df: pd.DataFrame, cfg: dict, scored: pd.DataFrame | Non
     signal.rule = {"stats": rule_stats(trades), "trades": trades[-8:], "trades_all": trades}
     signal.history = {"horizon": horizon, **signal.rule["stats"]}
 
+    # Destek/direnç: son 1 yılın dönüş noktaları (kâr alma ve geri çekilme seviyeleri olarak gösterilir)
+    supports, resistances = support_resistance(complete, st["atr"], limit=3) if st["atr"] else ([], [])
+
     signal.plan = {
         "action": {"BUY": "AL", "ABOVE_ZONE": "TUT", "TREND": "TUT", "EXIT": "SAT", "WAIT": "BEKLE"}[st["state"]],
         "state": st["state"], "summary": st["summary"], "price": st["price"],
@@ -296,5 +300,6 @@ def analyze(symbol: str, df: pd.DataFrame, cfg: dict, scored: pd.DataFrame | Non
         "stop": st["stop"], "exit_level": st["exit_level"], "atr": st["atr"],
         "close": st["close"], "as_of": st["as_of"],
         "conditions": st["conditions"], "signal": st["signal"], "market_open": st["market_open"],
+        "supports": supports, "resistances": resistances,
     }
     return signal
