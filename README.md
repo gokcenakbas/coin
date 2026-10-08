@@ -13,7 +13,7 @@ sinyal değiştiğinde **Telegram / Discord / Slack** üzerinden uyarı göndere
 |---|---|
 | **Tüm coinler** | Binance'te işlem gören tüm USDT paritelerini veya hacme göre ilk N coini (varsayılan 100) otomatik bulur. Stablecoinler hariç tutulur. |
 | **5 yıllık veri** | Her coin için son 5 yıl (+ gösterge ısınma süresi) günlük mum verisini indirir ve `data/ohlcv/` altında önbelleğe alır. Sonraki çalıştırmalarda yalnızca eksik günler indirilir. |
-| **Al-sat sinyali** | 6 bileşenli puan: trend (200G ort.), golden/death cross bölgesi, RSI, MACD, Bollinger bantları ve **5 yıllık fiyat yüzdeliği** (fiyat 5 yılın neresinde?). |
+| **Al-sat sinyali** | **Trend kırılımı kuralı** (GÜÇLÜ AL / TRENDDE / SAT / BEKLE): alım bölgesi, zarar-durdur ve satış seviyesi. Gerçek veriyle iki ayrı dönemde test edildi (aşağıda). Eski 6 bileşenli teknik puan yalnızca bilgi olarak gösterilir. |
 | **Geçmiş başarı** | "Son 5 yılda bu sinyal kaç gün oluştu ve 30 gün sonra ortalama ne oldu?" sorusunu her coin için ayrı ayrı yanıtlar. |
 | **Geriye dönük test** | Aynı kuralı son 5 yıl üzerinde komisyon ve iz süren stop ile test eder, **al-tut** stratejisiyle karşılaştırır. |
 | **Risk seviyeleri** | AL sinyallerinde ATR tabanlı zarar-durdur ve kâr-al seviyeleri önerir. |
@@ -171,7 +171,39 @@ gösterir; büyük hareket olasılığını söyler, yönünü söylemez. **⚡ 
 mumlarını izler: bir dakikadaki hacim normalin 5 katını aşar ve fiyat aynı dakikada %0,8'den fazla oynarsa haber verir
 (5 dakikada %3 eşiğini beklemeden).
 
-## Sinyal nasıl hesaplanır?
+## GÜÇLÜ AL nasıl çalışır? (trend kırılımı kuralı)
+
+Eski teknik puanın GÜÇLÜ AL sinyali gerçek veride rastgele alımdan iyi çıkmadı (aşağıda). Bu yüzden asıl sinyal,
+`tools/research/entryexit.py` ve `breakout.py` ile test edilen şu kurala çevrildi (`cointracker/trend.py`):
+
+**AL (GÜÇLÜ AL)** — dördü birden, günlük **kapanışa** göre:
+1. coin 200 günlük ortalamanın üstünde,
+2. 50 günlük ortalama 200 günlük ortalamanın üstünde,
+3. **Bitcoin** 200 günlük ortalamanın üstünde (piyasa yükselişte; değilse yeni alım yok),
+4. kapanış son 20 günün en yükseği (kırılım).
+
+Alım bölgesi: kırılım seviyesi (önceki 19 günün zirvesi) … sinyal kapanışı + 0,5 ATR; sinyal **3 gün** geçerli.
+Fiyat bölgenin üstündeyse kovalanmaz (TRENDDE gösterilir).
+
+**SAT:** günlük kapanış **20 günlük ortalamanın altına** inerse ertesi gün; ayrıca alış fiyatının **2 ATR altı**
+zarar-durdur. Hedef fiyat yoktur, trend sürdükçe tutulur. Uygulamada "✅ Aldım" ile alış fiyatınızı kaydederseniz
+satış kuralı tetiklendiğinde Mac bildirimi gelir (💼 Pozisyonlarım).
+
+Gerçek veriyle ölçüm (Ekim 2026, 32 büyük coin, komisyon+kayma her yön %0,15, sinyalin ertesi günü açılışta alış):
+
+| Dönem | İşlem | Başarı | İşlem başına ort. | Kâr faktörü | Aynı satış kuralıyla rastgele alım |
+|---|---|---|---|---|---|
+| Eğitim (Eki 2021 – Eki 2024) | 554 | %38 | **+%8,9** | 2,63 | +%1,1 (PF 1,35) |
+| Test (Eki 2024 – Eki 2026) | 368 | %29 | **+%13,8** | 3,16 | +%2,7 (PF 1,84) |
+
+Yıllara göre işlem başına ortalama: 2021 +%15, 2022 işlem yok (Bitcoin düşüşte), 2023 +%3,5, 2024 +%12, 2025 +%18,
+2026 +%4 (rastgele alım: −%2 … +%5). Portföy testinde (en fazla 10 eşit pozisyon) en büyük düşüş %34-42 oldu.
+
+Dikkat: işlemlerin çoğu küçük zararla kapanır, kâr az sayıdaki büyük yükselişten gelir; zarar-durdur ve satış kuralı
+uygulanmazsa sonuç bozulur. Test edilen coinler bugünün büyük coinleri olduğu için (hayatta kalma yanılgısı) geçmiş
+sonuçlar bir miktar iyimserdir. Her işleme sermayenin küçük bir kısmını ayırın ve kaldıraç kullanmayın.
+
+## Sinyal nasıl hesaplanır? (eski teknik puan — yalnızca bilgi)
 
 Her gün için aşağıdaki bileşenler toplanır:
 

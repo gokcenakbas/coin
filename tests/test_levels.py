@@ -45,17 +45,14 @@ def test_falls_back_to_five_years_when_price_is_at_yearly_low(cfg):
 
 @pytest.mark.parametrize("seed", range(12))
 def test_plan_levels_are_consistent(cfg, seed):
-    sig = analyze("X", make_ohlcv(synthetic_prices(seed=seed)), cfg)
+    market = make_ohlcv(np.linspace(100, 300, 1900))
+    sig = analyze("X", make_ohlcv(synthetic_prices(seed=seed)), cfg, market=market)
     p = sig.plan
-    assert p["stop"] < p["buy_low"] <= p["buy_high"] <= p["price"]
-    assert p["price"] < p["target1"] < p["target2"]
-    assert p["sell_low"] <= p["sell_high"]
-    assert p["risk_reward"] is None or p["risk_reward"] > 0
-    assert p["action"] == {"BUY": "AL", "STRONG_BUY": "AL", "SELL": "SAT", "STRONG_SELL": "SAT"}.get(sig.level, "BEKLE")
-    assert p["summary"]
-    assert sig.stop_loss == p["stop"] and sig.take_profit == p["target1"]
+    assert p["action"] == {"STRONG_BUY": "AL", "TREND": "TUT", "SELL": "SAT"}.get(sig.level, "BEKLE")
+    assert p["summary"] and len(p["conditions"]) == 4
+    assert sig.stop_loss == p["stop"] and p["stop"] < p["price"]
+    assert p["exit_level"] > 0
     if p["action"] == "AL":
-        assert p["buy_high"] == p["price"] and p["in_buy_zone"]
+        assert p["buy_low"] <= p["price"] <= p["buy_high"] and p["in_buy_zone"]
     if p["action"] == "SAT":
-        assert p["sell_low"] == p["price"]
-    assert p["cheap_5y"] < p["expensive_5y"]
+        assert p["price"] < p["exit_level"]

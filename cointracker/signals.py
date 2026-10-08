@@ -1,4 +1,7 @@
-"""Göstergeleri tek bir puanda birleştirip AL / SAT / BEKLE sinyali üretir.
+"""Coin analizi: asıl sinyal trend kırılımı kuralıdır (cointracker/trend.py).
+
+Aşağıdaki teknik puan eski sistemdir; gerçek veride GÜÇLÜ AL/AL rastgele alımdan iyi çıkmadığı için artık
+sinyal olarak kullanılmaz, yalnızca bilgi olarak gösterilir.
 
 Puan bileşenleri (her gün için hesaplanır, böylece aynı kural geriye dönük test edilebilir):
   trend  : fiyat 200 günlük ortalamanın üstünde +1 / altında -1
@@ -17,11 +20,12 @@ import numpy as np
 import pandas as pd
 
 from cointracker.indicators import add_indicators
-from cointracker.levels import trade_plan
+from cointracker.trend import rule_stats, rule_trades, setup as trend_setup, trend_frame
 
-LEVELS = ["STRONG_SELL", "SELL", "HOLD", "BUY", "STRONG_BUY"]
+LEVELS = ["STRONG_SELL", "SELL", "HOLD", "BUY", "TREND", "STRONG_BUY"]
 LABELS_TR = {
     "STRONG_BUY": "GÜÇLÜ AL",
+    "TREND": "TRENDDE",
     "BUY": "AL",
     "HOLD": "BEKLE",
     "SELL": "SAT",
@@ -121,7 +125,9 @@ class Signal:
     history: dict = field(default_factory=dict)
     plan: dict | None = None
     market: dict | None = None
-    edge: dict = field(default_factory=dict)  # AL/SAT sinyalinin geçmiş isabeti ve rastgele günle kıyası
+    edge: dict = field(default_factory=dict)  # eski puanın AL/SAT isabeti ve rastgele günle kıyası
+    setup: dict | None = None  # trend kırılımı kuralına göre durum, alım bölgesi, stop, satış seviyesi
+    rule: dict = field(default_factory=dict)  # kuralın bu coindeki son 5 yıllık işlemleri
 
     @property
     def label(self) -> str:
@@ -129,7 +135,7 @@ class Signal:
 
     @property
     def is_buy(self) -> bool:
-        return self.level in ("BUY", "STRONG_BUY")
+        return self.level == "STRONG_BUY"
 
     @property
     def is_sell(self) -> bool:
@@ -241,7 +247,6 @@ def analyze(symbol: str, df: pd.DataFrame, cfg: dict, scored: pd.DataFrame | Non
     scored = scored if scored is not None else score_frame(df, cfg)
     last = scored.iloc[-1]
     s = cfg["signals"]
-    risk = cfg["risk"]
     horizon = int(s["horizon_days"])
 
     signal = Signal(
@@ -258,44 +263,38 @@ def analyze(symbol: str, df: pd.DataFrame, cfg: dict, scored: pd.DataFrame | Non
         change_30d=_pct_change(scored["close"], 30),
     )
 
-    # Geçmiş 5 yılda benzer sinyal oluştuğunda ne oldu?
+    # Teknik puan (eski sistem): sinyal olarak kullanılmaz, yalnızca bilgi ve karşılaştırma için
     window = scored.loc[scored.index >= scored.index[-1] - pd.Timedelta(days=1826)]
-    if signal.is_buy:
-        mask = window["score"] >= s["buy_threshold"]
-    elif signal.is_sell:
-        mask = window["score"] <= s["sell_threshold"]
-    else:
-        mask = window["level"] == "HOLD"
-    signal.history = forward_return_stats(window["close"], mask, horizon)
-    signal.history["horizon"] = horizon
-    signal.history["baseline"] = forward_return_stats(window["close"], pd.Series(True, index=window.index), horizon)
-    # Sinyal gerçekten işe yarıyor mu? Güncel seviyeden bağımsız olarak AL ve SAT günlerinin sonuçları
     signal.edge = {
         "horizon": horizon,
         "buy": forward_return_stats(window["close"], window["score"] >= s["buy_threshold"], horizon),
         "sell": forward_return_stats(window["close"], window["score"] <= s["sell_threshold"], horizon),
-        "all": signal.history["baseline"],
+        "all": forward_return_stats(window["close"], pd.Series(True, index=window.index), horizon),
     }
-
-    # Piyasa rejimi: aynı sinyal, Bitcoin yükselişteyken ve düşüşteyken ne kadar işe yaramış?
     if market is not None and not market.empty:
-        regime = market_regime(market).reindex(window.index).ffill()
-        signal.history["by_regime"] = {
-            key: forward_return_stats(window["close"], mask & (regime == key), horizon) for key in REGIME_LABELS
-        }
         signal.market = market_info(market)
 
-    # Alım bölgesi, hedefler ve zarar-durdur (destek/direnç seviyelerinden)
-    signal.plan = trade_plan(scored, cfg)
-    if signal.plan:
-        signal.stop_loss = signal.plan["stop"]
-        signal.take_profit = signal.plan["target1"]
-    else:
-        atr_value = _num(last["atr"])
-        if atr_value:
-            signal.stop_loss = signal.price - risk["stop_atr_mult"] * atr_value
-            signal.take_profit = signal.price + risk["take_profit_atr_mult"] * atr_value
-    if signal.plan and signal.history.get("count"):
-        # 5 yıllık geçmişte bu sinyalden `horizon` gün sonra ortalama nerede olunduğu (tahmin değil, ortalama)
-        signal.plan["hist_avg_price"] = signal.price * (1 + signal.history["avg_return"])
+    # Asıl sinyal: trend kırılımı kuralı (bkz. cointracker/trend.py ve tools/research/)
+    # Kural günlük KAPANIŞA göre çalışır: bugünün henüz kapanmamış mumu sinyal için kullanılmaz,
+    # yalnızca anlık fiyatın alım bölgesinde olup olmadığına bakılır.
+    today = pd.Timestamp.now(tz="UTC").tz_localize(None).normalize()
+    complete = scored.iloc[:-1] if scored.index[-1] >= today and len(scored) > 1 else scored
+    tf = trend_frame(complete, market)
+    st = trend_setup(tf, price=float(scored["close"].iloc[-1]))
+    signal.setup = st
+    signal.level = st["level"]
+    signal.stop_loss = st["stop"]
+    signal.take_profit = None
+    trades = rule_trades(tf, since=tf.index[-1] - pd.Timedelta(days=1826))
+    signal.rule = {"stats": rule_stats(trades), "trades": trades[-8:], "trades_all": trades}
+    signal.history = {"horizon": horizon, **signal.rule["stats"]}
+
+    signal.plan = {
+        "action": {"BUY": "AL", "ABOVE_ZONE": "TUT", "TREND": "TUT", "EXIT": "SAT", "WAIT": "BEKLE"}[st["state"]],
+        "state": st["state"], "summary": st["summary"], "price": st["price"],
+        "buy_low": st["buy_low"], "buy_high": st["buy_high"], "in_buy_zone": st["in_buy_zone"],
+        "stop": st["stop"], "exit_level": st["exit_level"], "atr": st["atr"],
+        "close": st["close"], "as_of": st["as_of"],
+        "conditions": st["conditions"], "signal": st["signal"], "market_open": st["market_open"],
+    }
     return signal

@@ -32,7 +32,7 @@ from cointracker.exchanges import get_quotes
 from cointracker.indicators import add_indicators
 from cointracker.live import INTRADAY_TIMEFRAMES, orderbook_summary, ticker_summary, timeframe_signal
 from cointracker.movers import candidate
-from cointracker.signals import LABELS_TR
+from cointracker.signals import LABELS_TR, classify
 
 log = logging.getLogger(__name__)
 WEB_DIR = Path(__file__).parent / "web"
@@ -78,7 +78,8 @@ class WatchStore:
     def __init__(self, path: Path):
         self.path = path
         self.lock = threading.Lock()
-        self.data: dict = {"favorites": [], "alarms": [], "settings": {"capital": None, "risk_pct": 1.0}}
+        self.data: dict = {"favorites": [], "alarms": [], "positions": [],
+                           "settings": {"capital": None, "risk_pct": 1.0}}
         if path.exists():
             try:
                 self.data.update(json.loads(path.read_text(encoding="utf-8")))
@@ -88,6 +89,10 @@ class WatchStore:
     def snapshot(self) -> dict:
         with self.lock:
             return json.loads(json.dumps(self.data))
+
+    def positions(self) -> list[dict]:
+        with self.lock:
+            return json.loads(json.dumps(self.data.get("positions", [])))
 
     def favorites(self) -> set[str]:
         with self.lock:
@@ -122,6 +127,25 @@ class WatchStore:
                 self.data["settings"] = {"capital": capital, "risk_pct": risk}
             elif action == "remove_alarm":
                 self.data["alarms"] = [a for a in self.data["alarms"] if a["id"] != body.get("id")]
+            elif action == "add_position":
+                sym = normalize_symbol(str(body["symbol"]), quote)
+                entry, stop = float(body["entry"]), float(body["stop"])
+                qty = body.get("qty")
+                qty = None if qty in (None, "") else float(qty)
+                if not (math.isfinite(entry) and entry > 0 and math.isfinite(stop) and 0 < stop < entry) or \
+                        (qty is not None and not (math.isfinite(qty) and qty > 0)):
+                    raise ValueError("geçersiz pozisyon")
+                self.data["positions"] = [p for p in self.data["positions"] if p["symbol"] != sym]
+                self.data["positions"].append({
+                    "id": uuid.uuid4().hex[:12], "symbol": sym, "entry": entry, "stop": stop, "qty": qty,
+                    "opened": datetime.now(timezone.utc).isoformat(), "notified": None,
+                })
+            elif action == "remove_position":
+                self.data["positions"] = [p for p in self.data["positions"] if p["id"] != body.get("id")]
+            elif action == "mark_position":
+                for p in self.data["positions"]:
+                    if p["id"] == body.get("id"):
+                        p["notified"] = str(body.get("notified") or "")[:40] or None
             else:
                 raise ValueError("bilinmeyen işlem")
             self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -219,6 +243,7 @@ class DashboardApp:
                 self.no_data &= keep
             self._set_status(phase="ready", updated=datetime.now(timezone.utc).isoformat())
             self._notify_level_changes(previous)
+            self._check_positions()
             self.scan_movers(symbols)
         except Exception as exc:
             log.exception("Panel verisi yenilenemedi")
@@ -267,9 +292,38 @@ class DashboardApp:
             ]
         for sig in changes:
             self.notify(
-                f"{base_asset(sig.symbol, self.quote)}: {LABELS_TR[previous[sig.symbol]]} → {sig.label}",
-                f"Puan {sig.score:+d} · fiyat {sig.price:g} USDT",
+                f"{base_asset(sig.symbol, self.quote)}: {LABELS_TR.get(previous[sig.symbol], previous[sig.symbol])} → {sig.label}",
+                (sig.plan or {}).get("summary") or f"Fiyat {sig.price:g} USDT",
             )
+
+    def position_status(self, pos: dict) -> dict:
+        """Elimdeki pozisyon için satış kuralının durumu (son günlük kapanışa göre)."""
+        with self.lock:
+            r = self.results.get(pos["symbol"])
+        if r is None or not r.signal.setup:
+            return {"action": None}
+        st = r.signal.setup
+        price, close, exit_level = st["price"], st["close"], st["exit_level"]
+        if price <= pos["stop"]:
+            return {"action": "SAT", "reason": f"zarar-durdur ({pos['stop']:g}) çalıştı", "price": price, "exit_level": exit_level}
+        if exit_level is not None and close < exit_level:
+            return {"action": "SAT", "reason": f"günlük kapanış 20G ortalamanın ({exit_level:g}) altında",
+                    "price": price, "exit_level": exit_level}
+        return {"action": "TUT", "reason": f"kapanış {exit_level:g} (20G ort.) altına inerse sat" if exit_level else "",
+                "price": price, "exit_level": exit_level}
+
+    def _check_positions(self) -> None:
+        """Elimdeki coinlerde satış kuralı tetiklendiyse bir kez bildirim gönderir."""
+        for pos in self.watch.positions():
+            status = self.position_status(pos)
+            if status.get("action") == "SAT":
+                key = f"SAT:{status['price']:g}"
+                if pos.get("notified") != key:
+                    base = base_asset(pos["symbol"], self.quote)
+                    pnl = status["price"] / pos["entry"] - 1
+                    self.notify(f"🔴 {base}: SAT zamanı", f"{status['reason'].capitalize()} · alış {pos['entry']:g}, "
+                                f"şu an {status['price']:g} ({pnl * 100:+.1f}%)")
+                    self.watch.apply({"action": "mark_position", "id": pos["id"], "notified": key}, self.quote)
 
     def start_background(self, refresh_minutes: float, update: bool = True) -> threading.Thread:
         def loop() -> None:
@@ -295,32 +349,24 @@ class DashboardApp:
             "bt_return": bt.total_return if bt else None,
             "bh_return": bt.buy_hold_return if bt else None,
             "win_rate": bt.win_rate if bt else None,
-            "plan": {k: s.plan[k] for k in ("action", "buy_low", "buy_high", "target1", "stop", "in_buy_zone")}
+            "plan": {k: s.plan[k] for k in ("action", "state", "buy_low", "buy_high", "stop", "exit_level", "in_buy_zone")}
             if s.plan else None,
+            "signal_days_ago": (s.setup or {}).get("signal", {}).get("days_ago") if (s.setup or {}).get("signal") else None,
+            "rule": (s.rule or {}).get("stats"),
         }
 
     @staticmethod
     def _reliability(results: dict[str, CoinAnalysis]) -> dict | None:
-        """Tüm coinlerde (gün ağırlıklı): AL sonrası yükselme, SAT sonrası düşme ve rastgele gün oranları."""
-        totals = {k: [0, 0.0] for k in ("buy", "sell", "all")}
-        horizon = None
+        """Trend kuralının bu listedeki coinlerde son 5 yılda kapanmış işlemleri (coin bazında toplam)."""
+        rets: list[float] = []
         for r in results.values():
-            edge = r.signal.edge or {}
-            horizon = edge.get("horizon", horizon)
-            for key in totals:
-                st = edge.get(key) or {}
-                if st.get("count"):
-                    totals[key][0] += st["count"]
-                    totals[key][1] += st["count"] * st["win_rate"]
-        if not totals["all"][0]:
+            rets += [t["ret"] for t in (r.signal.rule or {}).get("trades_all", []) if not t["open"]]
+        if not rets:
             return None
-        rise = {k: (w / n if n else None) for k, (n, w) in totals.items()}
-        return {
-            "horizon": horizon,
-            "buy_rise": rise["buy"], "buy_days": totals["buy"][0],
-            "sell_fall": None if rise["sell"] is None else 1 - rise["sell"], "sell_days": totals["sell"][0],
-            "all_rise": rise["all"], "all_fall": 1 - rise["all"], "coins": len(results),
-        }
+        arr = np.array(rets)
+        gains, losses = arr[arr > 0].sum(), -arr[arr <= 0].sum()
+        return {"coins": len(results), "trades": len(arr), "win_rate": float((arr > 0).mean()),
+                "avg": float(arr.mean()), "profit_factor": float(gains / losses) if losses > 0 else None}
 
     def signals_payload(self) -> dict:
         with self.lock:
@@ -338,8 +384,12 @@ class DashboardApp:
             level, label = ("NODATA", "Yeni coin") if sym in no_data else ("PENDING", "Hazırlanıyor")
             items.append({"symbol": sym, "base": base_asset(sym, self.quote), "price": None, "score": None,
                           "level": level, "label": label})
-        items.sort(key=lambda i: (i["score"] is None, -(i["score"] or 0)))
-        return clean({"status": status, "items": items, "watch": self.watch.snapshot()})
+        order = {"STRONG_BUY": 0, "TREND": 1, "SELL": 2, "HOLD": 3}
+        items.sort(key=lambda i: (order.get(i["level"], 9), i.get("signal_days_ago") or 0, i["base"]))
+        watch = self.watch.snapshot()
+        for pos in watch.get("positions", []):
+            pos["status"] = self.position_status(pos)
+        return clean({"status": status, "items": items, "watch": watch})
 
     def coin_payload(self, symbol: str) -> dict:
         cached = self._detail_cache.get(symbol)
@@ -366,7 +416,8 @@ class DashboardApp:
         if analysis:
             s = analysis.signal
             timeframes.append({
-                "interval": "1d", "label": "1 gün", "score": s.score, "level": s.level, "level_label": s.label,
+                "interval": "1d", "label": "1 gün (eski puan)", "score": s.score, "level": classify(s.score, self.cfg),
+                "level_label": LABELS_TR[classify(s.score, self.cfg)],
                 "rsi": s.rsi, "trend": None, "macd": None, "change": None,
             })
 
@@ -384,10 +435,14 @@ class DashboardApp:
             for q in get_quotes(base_asset(symbol, self.quote), self.cfg["exchanges"])
         ]
 
+        signal = None
+        if analysis:
+            signal = asdict(analysis.signal) | {"label": analysis.signal.label}
+            signal["rule"] = {k: v for k, v in signal["rule"].items() if k != "trades_all"}
         payload = clean({
             "symbol": symbol,
             "base": base_asset(symbol, self.quote),
-            "signal": asdict(analysis.signal) | {"label": analysis.signal.label} if analysis else None,
+            "signal": signal,
             "backtest": asdict(analysis.backtest) if analysis and analysis.backtest else None,
             "timeframes": timeframes,
             "orderbook": orderbook,

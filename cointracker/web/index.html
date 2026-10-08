@@ -46,7 +46,10 @@ tbody tr.sel{background:var(--hover);box-shadow:inset 3px 0 0 var(--accent)}
 .badge{display:inline-block;padding:1px 8px;border-radius:6px;font-weight:600;font-size:12px}
 .b-STRONG_BUY{background:var(--up);color:#fff}.b-BUY{background:var(--up-bg);color:var(--up)}
 .b-HOLD{background:var(--hover);color:var(--muted)}.b-SELL{background:var(--down-bg);color:var(--down)}
-.b-STRONG_SELL{background:var(--down);color:#fff}
+.b-STRONG_SELL{background:var(--down);color:#fff}.b-TREND{background:var(--up-bg);color:var(--up)}
+.cond{list-style:none;padding:0;margin:8px 0}.cond li{margin:3px 0}.cond .ok{color:var(--up)}.cond .no{color:var(--muted)}
+.posbox{border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:10px}
+.posbox.sell{border-color:var(--down);background:var(--down-bg)}
 .flash-up{animation:fu .8s}.flash-down{animation:fd .8s}
 @keyframes fu{from{background:var(--up-bg)}to{background:transparent}}
 @keyframes fd{from{background:var(--down-bg)}to{background:transparent}}
@@ -137,7 +140,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:4px 16px 20px
     <div id="moves"></div>
   </section>
 
-  <section class="card" id="relCard"><h2>Sinyaller ne kadar güvenilir?</h2><div id="relBody"></div></section>
+  <section class="card" id="relCard"><h2>GÜÇLÜ AL nasıl çalışır, ne kadar güvenilir?</h2><div id="relBody"></div></section>
 
   <section class="card" id="moversCard">
     <h2>🚀 Patlama adayları <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400" id="moversInfo"></span></h2>
@@ -148,8 +151,10 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:4px 16px 20px
   <section class="card" id="listCard">
     <div class="toolbar">
       <button data-filter="all" class="active">Tümü</button>
-      <button data-filter="buy">AL</button>
+      <button data-filter="buy">GÜÇLÜ AL</button>
+      <button data-filter="trend">Trendde</button>
       <button data-filter="sell">SAT</button>
+      <button data-filter="pos">💼 Pozisyonlarım</button>
       <button data-filter="fav">⭐ Takip listem</button>
       <span class="spacer"></span>
       <input type="search" id="search" placeholder="Coin ara…">
@@ -161,12 +166,12 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:4px 16px 20px
           <th data-sort="price">Fiyat</th>
           <th data-sort="chg24">24s</th>
           <th data-sort="vol24" class="hide-sm hide-detail">24s Hacim</th>
-          <th data-sort="score">Sinyal</th>
+          <th data-sort="levelrank">Sinyal</th>
           <th data-sort="rsi" class="hide-sm hide-detail">RSI</th>
           <th data-sort="pct_rank_5y" class="hide-sm hide-detail" title="Fiyatın son 5 yıl içindeki konumu (0 = en ucuz)">5y %</th>
           <th data-sort="buy_dist" class="hide-sm" title="Önerilen alım bölgesi ve şu anki fiyata uzaklığı">Alım bölgesi</th>
-          <th data-sort="tgt_dist" class="hide-sm" title="Hedef 1 (satış) ve şu anki fiyattan uzaklığı">Hedef</th>
-          <th data-sort="bt_return" class="hide-sm hide-detail" title="Strateji getirisi, son 5 yıl">Strateji 5y</th>
+          <th data-sort="exit_dist" class="hide-sm" title="Satış seviyesi: günlük kapanış bu seviyenin (20 günlük ortalama) altına inerse sat">Satış seviyesi</th>
+          <th data-sort="rule_avg" class="hide-sm hide-detail" title="Bu kuralın bu coinde son 5 yıldaki işlemleri: sayı ve işlem başına ortalama">Kural 5y</th>
         </tr></thead>
         <tbody id="rows"></tbody>
       </table>
@@ -192,7 +197,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:4px 16px 20px
       <label class="muted"><input type="checkbox" id="showBB"> Bollinger</label>
     </div>
     <div id="chart"><div id="chartMsg"></div></div>
-    <div class="legend"><span><i style="background:var(--sma50)"></i>50 ort.</span><span><i style="background:var(--sma200)"></i>200 ort.</span><span><i style="background:var(--up)"></i>Alım bölgesi</span><span><i style="background:var(--accent)"></i>Hedef</span><span><i style="background:var(--down)"></i>Zarar-durdur</span><span id="lastTick"></span></div>
+    <div class="legend"><span><i style="background:var(--sma50)"></i>50 ort.</span><span><i style="background:var(--sma200)"></i>200 ort.</span><span><i style="background:var(--up)"></i>Alım bölgesi</span><span><i style="background:var(--accent)"></i>Satış seviyesi (20G ort.)</span><span><i style="background:var(--down)"></i>Zarar-durdur</span><span id="lastTick"></span></div>
     <div id="detailBody"></div>
     <div id="alarmBox"></div>
   </section>
@@ -202,7 +207,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:4px 16px 20px
   <button data-act="reset">⟲ Grafiği sıfırla <small>çift tık</small></button>
   <button data-act="refresh">↻ Yenile <small>R</small></button>
 </div>
-<footer>⚠️ Yatırım tavsiyesi değildir. Sinyaller teknik göstergelere dayalı otomatik hesaplamalardır; geçmiş performans geleceği garanti etmez.
+<footer>⚠️ Yatırım tavsiyesi değildir. Sinyaller geçmiş veriyle test edilmiş bir kurala dayalı otomatik hesaplamalardır; geçmiş performans geleceği garanti etmez.
 Grafikler: <a href="https://www.tradingview.com/" target="_blank" rel="noopener">TradingView Lightweight Charts</a>.</footer>
 
 <script src="/vendor/lightweight-charts.js"></script>
@@ -235,9 +240,9 @@ const trDate = iso => iso ? iso.slice(8, 10) + "." + iso.slice(5, 7) + "." + iso
 const fmtUsd = v => v == null ? "-" : "$" + compact.format(v);
 
 const state = {
-  items: [], bySym: {}, live: {}, filter: "all", search: "", sort: {key: "score", dir: -1},
+  items: [], bySym: {}, live: {}, filter: "all", search: "", sort: {key: "levelrank", dir: 1},
   selected: null, interval: "1h", rowEls: {}, hist: {}, lastMove: {}, moves: [], detailTimer: null,
-  watch: {favorites: [], alarms: []}, app: false, plan: null, baseline: {}, lastEarly: {}, firedAlarms: new Set(), autoSelected: false,
+  watch: {favorites: [], alarms: [], positions: []}, firedPos: new Set(), app: false, plan: null, baseline: {}, lastEarly: {}, firedAlarms: new Set(), autoSelected: false,
 };
 
 /* ---------------- 5 yıllık sinyal listesi ---------------- */
@@ -274,10 +279,10 @@ function renderStatus(s) {
   else if (s.phase === "error") el.textContent = "Hata: " + s.error;
   else if (s.phase === "ready" && s.updated) el.textContent = "Sinyaller: " + new Date(s.updated).toLocaleTimeString("tr-TR", {hour: "2-digit", minute: "2-digit"});
   else el.textContent = "Başlatılıyor…";
-  const ready = state.items.filter(i => i.score != null).length;
-  const buys = state.items.filter(i => i.level.endsWith("BUY")).length;
-  const sells = state.items.filter(i => i.level.endsWith("SELL")).length;
-  $("#counts").innerHTML = `${ready}/${state.items.length} coin · <span class="up">${buys} AL</span> · <span class="down">${sells} SAT</span>`;
+  const ready = state.items.filter(i => i.plan).length;
+  const buys = state.items.filter(i => i.level === "STRONG_BUY").length;
+  const sells = state.items.filter(i => i.level === "SELL").length;
+  $("#counts").innerHTML = `${ready}/${state.items.length} coin · <span class="up">${buys} GÜÇLÜ AL</span> · <span class="down">${sells} SAT</span>`;
 }
 
 const pctInt = v => v == null ? "-" : "%" + Math.round(v * 100);
@@ -296,23 +301,30 @@ function renderMarket(m) {
   const icon = {up: "🟢", down: "🔴", mixed: "🟡"}[m.regime];
   pill.style.display = "";
   pill.className = "pill " + (m.regime === "up" ? "up" : m.regime === "down" ? "down" : "");
-  pill.textContent = `Piyasa: ${icon} ${m.label}`;
+  const open = m.btc_vs_sma200 != null && m.btc_vs_sma200 >= 0;
+  pill.textContent = `Piyasa: ${icon} ${m.label} · yeni alım ${open ? "AÇIK" : "KAPALI"}`;
   pill.title = `Bitcoin ${fmtPrice(m.btc_price)} $ · 200 günlük ortalamanın %${(Math.abs(m.btc_vs_sma200) * 100).toFixed(1).replace(".", ",")} ${m.btc_vs_sma200 >= 0 ? "üstünde" : "altında"} · ${trDate(m.since)} tarihinden beri`;
 }
 
+// tools/research/entryexit.py ve breakout.py ile gerçek veride ölçülen sonuçlar (Ekim 2026, 32 coin, 5 yıl)
+const MEASURED = {train: {period: "Eki 2021 – Eki 2024", trades: 554, win: 0.375, avg: 0.089, pf: 2.63},
+                  test: {period: "Eki 2024 – Eki 2026", trades: 368, win: 0.293, avg: 0.138, pf: 3.16},
+                  random: {train: 0.011, test: 0.027}};
+
 function renderReliability(r) {
-  const card = $("#relCard");
-  if (!r || r.buy_rise == null) { card.style.display = "none"; return; }
-  const buy = edgeVerdict(r.buy_rise, r.all_rise);
-  const sell = r.sell_fall == null ? null : edgeVerdict(r.sell_fall, r.all_fall);
-  const weak = buy.cls !== "good";
-  card.className = "card " + (buy.cls === "good" ? "good" : buy.cls === "bad" ? "bad" : "");
-  card.style.display = "block";
+  const card = $("#relCard"), M = MEASURED;
+  card.className = "card"; card.style.display = "block";
+  const row = (name, x, rnd) => `<tr><td>${name}</td><td>${x.trades}</td><td>${pctInt(x.win)}</td><td class="up">${fmtPct(x.avg)}</td><td class="muted">${fmtPct(rnd)}</td></tr>`;
   $("#relBody").innerHTML = `
-    <p>Son 5 yılda bu listedeki ${r.coins} coinde, <b>AL</b> sinyalinden ${r.horizon} gün sonra fiyat <b>${pctInt(r.buy_rise)}</b> oranında yükseldi;
-      herhangi bir günde bu oran <b>${pctInt(r.all_rise)}</b> → <b>${buy.text}</b>.
-      ${sell ? `<b>SAT</b> sinyalinden sonra düşme oranı <b>${pctInt(r.sell_fall)}</b> (herhangi bir günde ${pctInt(r.all_fall)}) → ${sell.text}.` : ""}</p>
-    ${weak ? `<p class="muted">⚠ Bu yüzden sinyalleri tek başına al-sat kararı olarak kullanmayın. Her coinin "Neden?" bölümünde o coine özel geçmiş isabeti görebilirsiniz; işlem yaparsanız zarar-durdur kullanın ve pozisyonu küçük tutun.</p>` : ""}`;
+    <p><b>GÜÇLÜ AL</b> = coin ve Bitcoin 200 günlük ortalamanın üstünde, 50G ort. 200G'nin üstünde ve günlük kapanış son 20 günün zirvesi.
+      <b>Alım:</b> sinyalden sonraki 3 gün, fiyat alım bölgesindeyse. <b>Satış:</b> günlük kapanış 20 günlük ortalamanın altına inince
+      (ertesi gün) ya da alışın 2 ATR altındaki zarar-durdur çalışınca.</p>
+    <table><thead><tr><th>Dönem (32 coin)</th><th>İşlem</th><th>Başarı</th><th>İşlem başına ort.</th><th>Rastgele alım</th></tr></thead><tbody>
+      ${row(M.train.period, M.train, M.random.train)}${row(M.test.period + " (test)", M.test, M.random.test)}</tbody></table>
+    ${r ? `<p class="muted" style="margin:6px 0 0">Bu listedeki ${r.coins} coinde son 5 yıl: ${r.trades} işlem, başarı ${pctInt(r.win_rate)}, işlem başına ort. ${fmtPct(r.avg)}.</p>` : ""}
+    <p class="muted" style="margin:6px 0 0">⚠ İşlemlerin çoğu (≈%60-70) küçük zararla kapanır; kâr, az sayıdaki büyük yükselişten gelir. Bu yüzden
+      zarar-durduru ve satış kuralını mutlaka uygulayın, her işleme sermayenin küçük bir kısmını ayırın (ör. en fazla 1/10'u).
+      Testteki coinler bugünün büyük coinleri olduğu için geçmiş sonuçlar biraz iyimser olabilir.</p>`;
 }
 
 function rowValue(item, key) {
@@ -321,10 +333,12 @@ function rowValue(item, key) {
   if (key === "chg24") return live ? live.c / live.o - 1 : null;
   if (key === "vol24") return live ? live.q : null;
   if (key === "symbol") return item.symbol;
-  if (key === "buy_dist" || key === "tgt_dist") {
+  if (key === "levelrank") return {STRONG_BUY: 0, TREND: 1, SELL: 2, HOLD: 3}[item.level] ?? 9;
+  if (key === "rule_avg") return item.rule && item.rule.trades ? item.rule.avg : null;
+  if (key === "buy_dist" || key === "exit_dist") {
     if (!item.plan) return null;
-    const price = rowValue(item, "price");
-    return key === "buy_dist" ? item.plan.buy_high / price - 1 : item.plan.target1 / price - 1;
+    const price = rowValue(item, "price"), lv = key === "buy_dist" ? item.plan.buy_high : item.plan.exit_level;
+    return lv ? lv / price - 1 : null;
   }
   return item[key];
 }
@@ -336,21 +350,25 @@ function livePrice(item) {
 
 function buyCell(i) {
   const p = i.plan, price = livePrice(i);
-  if (!p || !price) return "-";
-  if (price >= p.buy_low && price <= p.buy_high * 1.001) return `<span class="zone-in">✓ bölgede</span>`;
-  return `${fmtPrice(p.buy_high)} <span class="muted">${fmtPct(p.buy_high / price - 1)}</span>`;
+  if (!p || !price || p.buy_high == null) return `<span class="muted">-</span>`;
+  if (price >= p.buy_low && price <= p.buy_high) return `<span class="zone-in">✓ bölgede</span>`;
+  return price > p.buy_high ? `<span class="muted">üstünde (${fmtPrice(p.buy_high)})</span>` : `<span class="muted">altında (${fmtPrice(p.buy_low)})</span>`;
 }
 
 function tgtCell(i) {
   const p = i.plan, price = livePrice(i);
-  if (!p || !price) return "-";
-  return `${fmtPrice(p.target1)} <span class="muted">${fmtPct(p.target1 / price - 1)}</span>`;
+  if (!p || !price || p.exit_level == null) return "-";
+  const below = price < p.exit_level;
+  return `<span class="${below ? "down" : ""}">${fmtPrice(p.exit_level)}</span> <span class="muted">${fmtPct(p.exit_level / price - 1)}</span>`;
 }
+
+function posFor(sym) { return (state.watch.positions || []).find(p => p.symbol === sym); }
 
 function renderTable() {
   const q = state.search.trim().toUpperCase(), favs = favSet();
   const pass = i => state.filter === "all" || (state.filter === "fav" ? favs.has(i.symbol) :
-    state.filter === "buy" ? i.level.endsWith("BUY") : i.level.endsWith("SELL"));
+    state.filter === "pos" ? !!posFor(i.symbol) : state.filter === "buy" ? i.level === "STRONG_BUY" :
+    state.filter === "trend" ? i.level === "TREND" : i.level === "SELL");
   let items = state.items.filter(i => pass(i) && (!q || i.base.includes(q)));
   const {key, dir} = state.sort;
   items.sort((a, b) => {
@@ -367,13 +385,13 @@ function renderTable() {
       <td data-f="price">${fmtPrice(rowValue(i, "price"))}</td>
       <td data-f="chg" class="${cls(chg)}">${fmtPct(chg)}</td>
       <td data-f="vol" class="hide-sm hide-detail">${fmtUsd(rowValue(i, "vol24"))}</td>
-      <td><span class="badge b-${i.level}">${esc(i.label)}</span> <span class="muted">${i.score == null ? "" : (i.score > 0 ? "+" : "") + i.score}</span></td>
+      <td>${posFor(i.symbol) ? "💼 " : ""}<span class="badge b-${i.level}">${esc(i.label)}</span>${i.level === "STRONG_BUY" && i.signal_days_ago != null ? ` <span class="muted">${i.signal_days_ago ? i.signal_days_ago + " g önce" : "yeni"}</span>` : ""}</td>
       <td class="hide-sm hide-detail">${i.rsi == null ? "-" : i.rsi.toFixed(0)}</td>
       <td class="hide-sm hide-detail">${i.pct_rank_5y == null ? "-" : "%" + (i.pct_rank_5y * 100).toFixed(0)}</td>
       <td class="hide-sm" data-f="buy">${buyCell(i)}</td>
       <td class="hide-sm" data-f="tgt">${tgtCell(i)}</td>
-      <td class="hide-sm hide-detail ${cls(i.bt_return)}">${fmtPct(i.bt_return)}</td></tr>`;
-  }).join("") || `<tr><td colspan="10" class="muted" style="text-align:center;padding:24px">${state.filter === "fav" ? "Takip listeniz boş — bir coinin yanındaki ☆ işaretine tıklayın." : state.items.length ? "Bu filtreye uyan coin yok." : "Coin listesi yükleniyor…"}</td></tr>`;
+      <td class="hide-sm hide-detail">${i.rule && i.rule.trades ? `<span class="${cls(i.rule.avg)}">${fmtPct(i.rule.avg)}</span> <span class="muted">(${i.rule.trades})</span>` : "-"}</td></tr>`;
+  }).join("") || `<tr><td colspan="10" class="muted" style="text-align:center;padding:24px">${state.filter === "fav" ? "Takip listeniz boş — bir coinin yanındaki ☆ işaretine tıklayın." : state.filter === "pos" ? "Kayıtlı pozisyon yok — bir coinin planında \"Aldım\" düğmesini kullanın." : state.items.length ? "Bu filtreye uyan coin yok." : "Coin listesi yükleniyor…"}</td></tr>`;
   tbody.querySelectorAll("tr[data-s]").forEach(tr => state.rowEls[tr.dataset.s] = tr);
 }
 
@@ -407,6 +425,7 @@ function onTickers(list) {
     state.live[t.s] = tick;
     trackMove(t.s, tick.c, now);
     checkAlarms(t.s, tick.c);
+    checkPosition(t.s, tick.c);
     const tr = state.rowEls[t.s];
     if (tr) {
       const pc = tr.querySelector('[data-f="price"]');
@@ -546,6 +565,15 @@ function checkAlarms(sym, price) {
   }
 }
 
+// Elimdeki coin zarar-durdurun altına inerse anında haber ver (20G kuralı günlük kapanışta sunucuda kontrol edilir)
+function checkPosition(sym, price) {
+  const pos = posFor(sym);
+  if (!pos || state.firedPos.has(pos.id) || price > pos.stop) return;
+  state.firedPos.add(pos.id);
+  const base = (state.bySym[sym] || {}).base || sym;
+  notify(`🔴 ${base}: zarar-durdur çalıştı — SAT`, `Fiyat ${fmtPrice(price)}, zarar-durdur ${fmtPrice(pos.stop)} (alış ${fmtPrice(pos.entry)})`);
+}
+
 function renderFavBtn() {
   const on = favSet().has(state.selected), b = $("#favBtn");
   b.textContent = on ? "★ Takipte" : "☆ Takibe al";
@@ -554,7 +582,7 @@ function renderFavBtn() {
 
 function renderBadge() {
   const item = state.bySym[state.selected];
-  $("#dBadge").innerHTML = item ? `<span class="badge b-${item.level}">${esc(item.label)}${item.score == null ? "" : " " + (item.score > 0 ? "+" : "") + item.score}</span>` : "";
+  $("#dBadge").innerHTML = item ? `<span class="badge b-${item.level}">${esc(item.label)}</span>` : "";
 }
 
 function renderAlarms() {
@@ -611,11 +639,11 @@ function applyPlanLines() {
   if (!p || p.symbol !== state.selected || !$("#showLevels").checked) return;
   const line = (price, color, title, style = 2) => planLines.push(candleS.createPriceLine(
     {price, color, lineWidth: 1, lineStyle: style, axisLabelVisible: true, title}));
-  line(p.buy_high, cssVar("--up"), p.action === "AL" ? "Alım" : "Alım bölgesi");
-  if (Math.abs(p.buy_high - p.buy_low) / p.buy_high > 0.001) line(p.buy_low, cssVar("--up"), "");
-  line(p.target1, cssVar("--accent"), "Hedef 1");
-  line(p.target2, cssVar("--accent"), "Hedef 2", 3);
-  line(p.stop, cssVar("--down"), "Stop");
+  if (p.buy_high != null) { line(p.buy_high, cssVar("--up"), "Alım bölgesi"); line(p.buy_low, cssVar("--up"), ""); }
+  if (p.exit_level != null) line(p.exit_level, cssVar("--accent"), "Satış (20G ort.)");
+  const pos = posFor(p.symbol);
+  if (pos) { line(pos.entry, cssVar("--muted"), "Alışım", 0); line(pos.stop, cssVar("--down"), "Stop"); }
+  else if (p.stop != null && p.action === "AL") line(p.stop, cssVar("--down"), "Stop");
 }
 
 function chartMsg(text) {
@@ -723,30 +751,56 @@ function kv(rows) {
   return `<div class="kv">${rows.map(([k, v]) => `<span class="muted">${k}</span><span>${v}</span>`).join("")}</div>`;
 }
 
+function renderPosition(p) {
+  const pos = posFor(state.selected);
+  const live = (state.live[state.selected] || {}).c || p.price;
+  if (!pos) {
+    const atr = (p.signal && p.signal.atr) || p.atr;
+    return `<div class="posbox" id="posNew"><b>Bu coini aldınız mı?</b> Alış fiyatınızı kaydedin; uygulama satış kuralını
+      takip edip zamanı gelince ${state.app ? "Mac bildirimi" : "bildirim"} göndersin.
+      <div class="row" style="margin-top:6px"><label class="muted">Alış fiyatı <input id="posEntry" type="text" inputmode="decimal" value="${fmtPrice(live)}" style="width:120px"></label>
+      <label class="muted">Miktar (isteğe bağlı) <input id="posQty" type="text" inputmode="decimal" style="width:100px"></label>
+      <button data-posadd="1" data-atr="${atr || ""}">✅ Aldım, takip et</button></div>
+      <p class="muted" style="margin:6px 0 0">Zarar-durdur, alış fiyatının 2 ATR (${atr ? fmtPrice(2 * atr) : "-"}) altına konur.</p></div>`;
+  }
+  const pnl = live / pos.entry - 1;
+  const exitLv = p.exit_level, closeBelow = exitLv != null && p.close < exitLv, nowBelow = exitLv != null && live < exitLv;
+  const hitStop = live <= pos.stop;
+  const sell = hitStop || closeBelow;
+  const why = hitStop ? `fiyat zarar-durdurun (${fmtPrice(pos.stop)}) altına indi` :
+    closeBelow ? `dünkü günlük kapanış (${fmtPrice(p.close)}) 20 günlük ortalamanın (${fmtPrice(exitLv)}) altında` : "";
+  return `<div class="posbox ${sell ? "sell" : ""}"><b>💼 Pozisyonum</b> — ${sell ? `<b class="down">SAT</b>: ${why}.` :
+      `<b class="up">TUT</b>: günlük kapanış ${fmtPrice(exitLv)} (20G ort.) altına inerse ertesi gün sat; fiyat ${fmtPrice(pos.stop)} altına inerse hemen sat.`}
+    ${!sell && nowBelow ? `<br><span class="warn">⚠ Fiyat şu an satış seviyesinin altında; gün bu seviyenin altında kapanırsa yarın satın.</span>` : ""}
+    ${kv([["Alış", fmtPrice(pos.entry) + (pos.qty ? ` × ${pos.qty.toLocaleString("tr-TR")}` : "")],
+          ["Şu an", `${fmtPrice(live)} <span class="${cls(pnl)}">${fmtPct(pnl)}</span>${pos.qty ? ` (${fmtPrice((live - pos.entry) * pos.qty)} USDT)` : ""}`],
+          ["Zarar-durdur", `${fmtPrice(pos.stop)} <span class="muted">${fmtPct(pos.stop / live - 1)}</span>`],
+          ["Satış seviyesi (20G ort.)", exitLv == null ? "-" : `${fmtPrice(exitLv)} <span class="muted">${fmtPct(exitLv / live - 1)}</span>`],
+          ["Kayıt", trDate(pos.opened)]])}
+    <div class="plan-btns"><button data-posdel="${esc(pos.id)}">${sell ? "✓ Sattım, kaydı sil" : "✕ Pozisyonu sil"}</button></div></div>`;
+}
+
 function renderPlan(s) {
-  const p = s.plan, h = s.history || {};
+  const p = s.plan;
   const price = (state.live[state.selected] || {}).c || p.price;
   const dist = v => `<span class="muted">${fmtPct(v / price - 1)}</span>`;
-  const zone = Math.abs(p.buy_high - p.buy_low) / p.buy_high > 0.001 ? `${fmtPrice(p.buy_low)} – ${fmtPrice(p.buy_high)}` : fmtPrice(p.buy_high);
-  const lvls = (list, word) => list.length ? list.map(l => `${fmtPrice(l.price)} <span class="muted">(${l.touches} kez ${word})</span>`).join("<br>") : "-";
-  const actionLevel = {AL: "BUY", SAT: "SELL", BEKLE: "HOLD"}[p.action];
-  return `<section class="card"><h2>İşlem planı — nereden alınır, nereden satılır?</h2>
-    <div class="plan-head"><span class="badge b-${actionLevel}" style="font-size:14px;padding:3px 12px">${esc(p.action)}</span><p>${esc(p.summary)}</p></div>
+  const actionLevel = {AL: "STRONG_BUY", TUT: "TREND", SAT: "SELL", BEKLE: "HOLD"}[p.action];
+  const inZone = p.buy_high != null && price >= p.buy_low && price <= p.buy_high;
+  const sg = p.signal;
+  return `<section class="card"><h2>Ne zaman alınır, ne zaman satılır?</h2>
+    <div class="plan-head"><span class="badge b-${actionLevel}" style="font-size:14px;padding:3px 12px">${esc(s.label)}</span><p>${esc(p.summary)}</p></div>
+    <ul class="cond">${p.conditions.map(c => `<li class="${c.ok ? "ok" : "no"}">${c.ok ? "✓" : "✗"} ${esc(c.text)}</li>`).join("")}</ul>
     <div class="levels">
-      <div class="lv buy"><span>Alım bölgesi</span><b>${zone}</b> ${p.in_buy_zone ? `<span class="zone-in" style="text-transform:none">✓ fiyat bölgede</span>` : dist(p.buy_high)}</div>
-      <div class="lv tgt"><span>Hedef 1 (satış)</span><b>${fmtPrice(p.target1)}</b> ${dist(p.target1)}</div>
-      <div class="lv tgt"><span>Hedef 2</span><b>${fmtPrice(p.target2)}</b> ${dist(p.target2)}</div>
-      <div class="lv stop"><span>Zarar-durdur</span><b>${fmtPrice(p.stop)}</b> ${dist(p.stop)}</div>
-      <div class="lv"><span>Risk / ödül</span><b>${p.risk_reward ? "1 : " + p.risk_reward.toFixed(1).replace(".", ",") : "-"}</b></div>
-      ${p.action === "SAT" ? `<div class="lv"><span>Satış aralığı</span><b>${fmtPrice(p.sell_low)} – ${fmtPrice(p.sell_high)}</b></div>` : ""}
+      ${p.buy_high != null ? `<div class="lv buy"><span>Alım bölgesi</span><b>${fmtPrice(p.buy_low)} – ${fmtPrice(p.buy_high)}</b> ${inZone ? `<span class="zone-in" style="text-transform:none">✓ fiyat bölgede</span>` : dist(price > p.buy_high ? p.buy_high : p.buy_low)}</div>` : ""}
+      ${sg ? `<div class="lv"><span>Sinyal günü</span><b>${trDate(sg.date)}</b> <span class="muted">${sg.days_ago ? sg.days_ago + " gün önce · 3 gün geçerli" : "dün kapanışta · 3 gün geçerli"}</span></div>` : ""}
+      ${p.exit_level != null ? `<div class="lv tgt"><span>Satış seviyesi (20G ort.)</span><b>${fmtPrice(p.exit_level)}</b> ${dist(p.exit_level)}</div>` : ""}
+      ${p.action === "AL" && p.stop ? `<div class="lv stop"><span>Zarar-durdur (şimdi alırsanız)</span><b>${fmtPrice(p.stop)}</b> ${dist(p.stop)}</div>` : ""}
     </div>
-    <div class="grid2" style="margin-top:10px">
-      ${kv([["Destekler (alt)", lvls(p.supports, "dip yapılmış")], ["Dirençler (üst)", lvls(p.resistances, "tepe yapılmış")]])}
-      ${kv([["5 yıllık ucuz bölge", p.cheap_5y ? "≤ " + fmtPrice(p.cheap_5y) : "-"], ["5 yıllık pahalı bölge", p.expensive_5y ? "≥ " + fmtPrice(p.expensive_5y) : "-"],
-            ...(p.hist_avg_price ? [[`Geçmişte bu sinyalden ${h.horizon} gün sonra ort.`, fmtPrice(p.hist_avg_price)]] : [])])}
-    </div>
+    <p class="muted" style="margin:8px 0 0"><b>Satış kuralı:</b> günlük kapanış 20 günlük ortalamanın altına inerse ertesi gün satın; fiyat alışın 2 ATR altına
+      (zarar-durdur) inerse hemen satın. Hedef fiyat yok — trend sürdükçe pozisyon tutulur. Sinyaller ${trDate(p.as_of)} günlük kapanışına göredir.</p>
+    ${renderPosition(p)}
     <div id="pos">
-      <h2 style="margin-bottom:8px">Ne kadar alınmalı? Kaldıraç önerisi</h2>
+      <h2 style="margin-bottom:8px">Ne kadar alınmalı?</h2>
       <div class="row">
         <label class="muted">Sermaye (USDT) <input id="posCap" type="text" inputmode="decimal" placeholder="ör. 1000" value="${state.watch.settings && state.watch.settings.capital != null ? state.watch.settings.capital : ""}"></label>
         <label class="muted">İşlem başına risk % <input id="posRisk" type="text" inputmode="decimal" value="${String((state.watch.settings || {}).risk_pct ?? 1).replace(".", ",")}" style="width:70px"></label>
@@ -754,16 +808,14 @@ function renderPlan(s) {
       <div id="posOut"></div>
     </div>
     <div class="plan-btns">
-      ${p.in_buy_zone ? "" : `<button data-planalarm="buy">🔔 Alım bölgesine inince haber ver</button>`}
-      <button data-planalarm="t1">🔔 Hedef 1'e çıkınca haber ver</button>
-      <button data-planalarm="stop">🔔 Zarar-durdura inerse haber ver</button>
+      ${p.buy_high != null && !inZone && price > p.buy_high ? `<button data-planalarm="buy">🔔 Alım bölgesine inince haber ver</button>` : ""}
+      ${p.exit_level != null ? `<button data-planalarm="exit">🔔 Satış seviyesine inince haber ver</button>` : ""}
     </div>
-    <p class="muted" style="margin:8px 0 0">Seviyeler son 1 yılın (gerekirse 5 yılın) dip/tepe noktalarından ve fiyat oynaklığından (ATR) hesaplanır; grafikte çizgi olarak gösterilir. Kesin değil, yol göstericidir.</p>
   </section>`;
 }
 
 const MMR = 0.005;            // vadeli işlemlerde yaklaşık bakım teminatı oranı
-const LEVERAGES = [1, 2, 3, 5, 10, 20];
+const LEVERAGES = [1, 2, 3];
 // Türkçe yazımı da kabul eder: "0,52", "65.000", "65.000,5", "1000"
 const parseNum = v => {
   const raw = String(v ?? "").trim().replace(/\s/g, "");
@@ -790,13 +842,15 @@ function updatePos() {
   const out = $("#posOut"), p = state.plan;
   if (!out || !p) return;
   const live = (state.live[state.selected] || {}).c || p.price;
-  const entry = p.in_buy_zone || p.action === "AL" ? live : p.buy_high;
-  const stop = p.stop, stopDist = (entry - stop) / entry;
+  const pos = posFor(state.selected);
+  const atr = (p.signal && p.signal.atr) || p.atr;
+  const entry = pos ? pos.entry : live;
+  const stop = pos ? pos.stop : atr ? entry - 2 * atr : null, stopDist = stop ? (entry - stop) / entry : 0;
   const capital = parseNum($("#posCap").value), riskPct = parseNum($("#posRisk").value) ?? 1;
   const base = (state.bySym[state.selected] || {}).base || "";
   if (!(stopDist > 0)) { out.innerHTML = ""; return; }
   // Güvenli üst sınır: tasfiye, zarar-durdurdan en az bir stop mesafesi daha uzakta olsun
-  const maxSafe = Math.max(1, Math.min(20, Math.floor(1 / (2 * stopDist + MMR))));
+  const maxSafe = Math.max(1, Math.min(3, Math.floor(1 / (2 * stopDist + MMR))));  // trend işlemleri uzun sürer: en fazla 3x
   let html = `<p class="muted" style="margin:0 0 6px">Giriş ${fmtPrice(entry)} · zarar-durdur ${fmtPrice(stop)} (${fmtPct(-stopDist)}) · güvenli kaldıraç üst sınırı <b>${maxSafe}x</b></p>`;
   let rec = 1, notional = null;
   if (capital > 0 && riskPct > 0) {
@@ -821,7 +875,7 @@ function updatePos() {
       return `<tr class="${l === rec && notional ? "rec" : ""}"><td>${l}x${l === 1 ? " (spot)" : ""}</td><td>${liq ? fmtPrice(liq) : "-"}</td>
         <td>${notional ? fmtPrice(notional / l) + " USDT" : liq ? fmtPct(liq / entry - 1) : "-"}</td><td class="${st.cls}">${st.text}</td></tr>`;
     }).join("")}</tbody></table>
-  <p class="muted" style="margin:8px 0 0">Miktarı bu hesapla belirlerseniz kaldıraç kaybınızı büyütmez; yalnızca bağlanan teminatı azaltır. Kaldıracı artırıp miktarı da büyütmek riski katlar. Vadeli işlemlerde fonlama ücreti ve tasfiye riski vardır; emin değilseniz 1x (spot) kullanın.</p>`;
+  <p class="muted" style="margin:8px 0 0">Bu kuralda işlemler haftalarca sürebilir; kaldıraçsız (spot) alım önerilir. Miktarı bu hesapla belirlerseniz kaldıraç kaybınızı büyütmez; yalnızca bağlanan teminatı azaltır. Kaldıracı artırıp miktarı da büyütmek riski katlar. Vadeli işlemlerde fonlama ücreti ve tasfiye riski vardır; emin değilseniz 1x (spot) kullanın.</p>`;
   out.innerHTML = html;
 }
 
@@ -839,17 +893,17 @@ function renderDetail(d) {
   if (state.plan) parts.push(renderPlan(s));
 
   // Zaman dilimleri
-  parts.push(`<section class="card"><h2>Zaman dilimlerine göre sinyal</h2><div class="tf">${d.timeframes.map(t => `
+  parts.push(`<section class="card"><h2>Kısa vadeli göstergeler (eski teknik puan — yalnızca bilgi)</h2><div class="tf">${d.timeframes.map(t => `
     <div><b>${esc(t.label)}</b><span class="badge b-${t.level}">${esc(t.level_label)}</span>
     <div class="muted" style="margin-top:4px">puan ${t.score > 0 ? "+" : ""}${t.score} · RSI ${t.rsi == null ? "-" : t.rsi.toFixed(0)}</div>
     ${t.trend ? `<div class="${t.trend === "up" ? "up" : "down"}">${t.trend === "up" ? "▲ trend yukarı" : "▼ trend aşağı"}</div>` : ""}</div>`).join("")}</div>
-    <p class="muted" style="margin:8px 0 0">Kısa vadeli (15 dk–4 sa) sinyaller daha sık değişir; günlük sinyal 5 yıllık veriye dayanır.</p></section>`);
+    <p class="muted" style="margin:8px 0 0">Bunlar alım-satım sinyali değildir; asıl sinyal yukarıdaki trend kuralıdır.</p></section>`);
 
   const grid = [];
   if (s) {
     const h = s.history || {};
     let hist = "";
-    if (h.count) hist = `<p>Son 5 yılda bu sinyal <b>${h.count} gün</b> görüldü → ${h.horizon} gün sonra ort. <b class="${cls(h.avg_return)}">${fmtPct(h.avg_return)}</b>, yükselme oranı <b>%${(h.win_rate * 100).toFixed(0)}</b>` +
+    if (false) hist = `<p>Son 5 yılda bu sinyal <b>${h.count} gün</b> görüldü → ${h.horizon} gün sonra ort. <b class="${cls(h.avg_return)}">${fmtPct(h.avg_return)}</b>, yükselme oranı <b>%${(h.win_rate * 100).toFixed(0)}</b>` +
       (h.baseline && h.baseline.count ? ` <span class="muted">(tüm günler: ${fmtPct(h.baseline.avg_return)})</span>` : "") + `</p>`;
     const e = s.edge || {};
     let edgeHtml = "";
@@ -866,7 +920,8 @@ function renderDetail(d) {
       edgeHtml += `</div>`;
     }
     const risk = !s.plan && s.stop_loss ? kv([["Zarar-durdur (≈2×ATR)", fmtPrice(s.stop_loss)], ["Kâr-al (≈3×ATR)", fmtPrice(s.take_profit)]]) : "";
-    grid.push(`<section class="card"><h2>Neden ${esc(s.label)}?</h2><ul class="reasons">${s.reasons.map(r => `<li>${esc(r)}</li>`).join("")}</ul>${hist}${edgeHtml}${risk}</section>`);
+    grid.push(`<section class="card"><h2>Teknik göstergeler (bilgi)</h2><ul class="reasons">${s.reasons.map(r => `<li>${esc(r)}</li>`).join("")}</ul>
+      <p class="muted">Eski teknik puan: ${s.score > 0 ? "+" : ""}${s.score}. Gerçek veride bu puanın AL/GÜÇLÜ AL sinyalleri rastgele alımdan iyi çıkmadığı için artık sinyal olarak kullanılmıyor.</p></section>`);
   }
   if (tk && tk.price) grid.push(`<section class="card"><h2>Son 24 saat</h2>${kv([
     ["Değişim", `<span class="${cls(tk.change_pct)}">${fmtPct(tk.change_pct)}</span>`],
@@ -882,13 +937,20 @@ function renderDetail(d) {
     ${kv([["En iyi alış / satış", `${fmtPrice(ob.best_bid)} / ${fmtPrice(ob.best_ask)}`], ["Makas", "%" + (ob.spread_pct * 100).toFixed(3).replace(".", ",")],
           ["En büyük alış duvarı", ob.bid_wall ? `${fmtPrice(ob.bid_wall.price)} (${fmtUsd(ob.bid_wall.usd)})` : "-"],
           ["En büyük satış duvarı", ob.ask_wall ? `${fmtPrice(ob.ask_wall.price)} (${fmtUsd(ob.ask_wall.usd)})` : "-"]])}</section>`);
-  if (bt) grid.push(`<section class="card"><h2>5 yıllık strateji testi</h2>${kv([
-    ["Dönem", `${trDate(bt.start)} → ${trDate(bt.end)}`],
-    ["Strateji getirisi", `<span class="${cls(bt.total_return)}">${fmtPct(bt.total_return)}</span>`],
-    ["Al-tut getirisi", `<span class="${cls(bt.buy_hold_return)}">${fmtPct(bt.buy_hold_return)}</span>`],
-    ["En büyük düşüş (strateji / al-tut)", `${fmtPct(bt.max_drawdown)} / ${fmtPct(bt.buy_hold_max_drawdown)}`],
-    ["İşlem sayısı", bt.trades], ["Başarı oranı", bt.win_rate == null ? "-" : "%" + (bt.win_rate * 100).toFixed(0)],
-    ["Piyasada kalma", "%" + (bt.exposure * 100).toFixed(0)]])}</section>`);
+  const rule = s && s.rule;
+  if (rule && rule.stats) {
+    const st = rule.stats;
+    grid.push(`<section class="card"><h2>Bu kural bu coinde son 5 yılda</h2>${st.trades ? kv([
+      ["İşlem sayısı", st.trades], ["Başarı oranı", pctInt(st.win_rate)],
+      ["İşlem başına ortalama", `<span class="${cls(st.avg)}">${fmtPct(st.avg)}</span>`],
+      ["Hepsi art arda yapılsaydı", `<span class="${cls(st.total)}">${fmtPct(st.total)}</span>`],
+      ["En iyi / en kötü işlem", `<span class="up">${fmtPct(st.best)}</span> / <span class="down">${fmtPct(st.worst)}</span>`]]) :
+      `<p class="muted">Son 5 yılda bu coinde kural hiç işlem açmadı.</p>`}
+      ${rule.trades && rule.trades.length ? `<table style="margin-top:8px"><thead><tr><th>Alış</th><th>Satış</th><th>Sonuç</th></tr></thead><tbody>
+        ${rule.trades.slice().reverse().map(t => `<tr><td>${trDate(t.entry_date)} · ${fmtPrice(t.entry)}</td><td>${t.open ? "<i>açık</i>" : trDate(t.exit_date) + " · " + fmtPrice(t.exit)}</td>
+          <td class="${cls(t.ret)}" title="${esc(t.reason)}">${fmtPct(t.ret)}</td></tr>`).join("")}</tbody></table>` : ""}
+      <p class="muted" style="margin:6px 0 0">Komisyon ve kayma (%0,15 + %0,15) dahildir. Tek coinin sonucu şansa çok bağlıdır; genel sonuç için üstteki karta bakın.</p></section>`);
+  }
   if (d.quotes.length) {
     const best = d.quotes[0];
     grid.push(`<section class="card wide"><h2>Nereden alınır?</h2><div style="overflow-x:auto"><table><thead><tr><th>Borsa</th><th>Fiyat</th><th class="hide-sm">Komisyon</th><th>Alış maliyeti</th><th></th></tr></thead><tbody>
@@ -951,12 +1013,25 @@ function addAlarm(kind, price) {
 }
 
 $("#detailBody").onclick = e => {
+  const add = e.target.closest("[data-posadd]");
+  if (add) {
+    const entry = parseNum($("#posEntry").value), qty = parseNum($("#posQty").value), atr = parseFloat(add.dataset.atr);
+    if (!(entry > 0) || !(atr > 0) || entry - 2 * atr <= 0) { toast("Geçersiz alış fiyatı", "Lütfen alış fiyatınızı yazın, ör. 65000 veya 0,52"); return; }
+    watchAction({action: "add_position", symbol: state.selected, entry, qty, stop: entry - 2 * atr})
+      .then(() => { toast("Pozisyon kaydedildi", "Satış zamanı gelince haber vereceğim."); loadDetail(); applyPlanLines(); })
+      .catch(err => toast("Hata", err.message));
+    return;
+  }
+  const del = e.target.closest("[data-posdel]");
+  if (del) {
+    watchAction({action: "remove_position", id: del.dataset.posdel}).then(() => { loadDetail(); applyPlanLines(); }).catch(err => toast("Hata", err.message));
+    return;
+  }
   const b = e.target.closest("[data-planalarm]");
   if (!b || !state.plan) return;
   const p = state.plan, which = b.dataset.planalarm;
   if (which === "buy") addAlarm("below", p.buy_high);
-  else if (which === "t1") addAlarm("above", p.target1);
-  else if (which === "stop") addAlarm("below", p.stop);
+  else if (which === "exit") addAlarm("below", p.exit_level);
 };
 $("#showLevels").onchange = () => applyPlanLines();
 $("#detailBody").addEventListener("input", e => { if (e.target.closest("#pos")) updatePos(); });

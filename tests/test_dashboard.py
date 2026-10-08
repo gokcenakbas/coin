@@ -78,10 +78,10 @@ def test_signals_payload(app):
     market = payload["status"]["market"]
     assert market["regime"] in ("up", "down", "mixed") and market["label"]
     rel = payload["status"]["reliability"]
-    assert rel["coins"] == 2 and 0 <= rel["buy_rise"] <= 1 and abs(rel["all_rise"] + rel["all_fall"] - 1) < 1e-9
-    total_days = sum(r.signal.edge["all"]["count"] for r in app.results.values())
-    assert rel["buy_days"] <= total_days
-    assert payload["watch"] == {"favorites": [], "alarms": [], "settings": {"capital": None, "risk_pct": 1.0}}
+    closed = sum(1 for r in app.results.values() for t in r.signal.rule["trades_all"] if not t["open"])
+    assert (rel is None and closed == 0) or (rel["coins"] == 2 and rel["trades"] == closed and 0 <= rel["win_rate"] <= 1)
+    assert all(i["level"] in ("STRONG_BUY", "TREND", "SELL", "HOLD", "NODATA") for i in payload["items"])
+    assert payload["watch"] == {"favorites": [], "alarms": [], "positions": [], "settings": {"capital": None, "risk_pct": 1.0}}
     json.dumps(payload, allow_nan=False)
 
 
@@ -224,3 +224,26 @@ def test_movers_scan_and_endpoint(app):
     for item in payload["items"]:
         assert item["tags"] and item["base"] in ("AAA", "BBB")
     json.dumps(payload, allow_nan=False)
+
+
+def test_positions_and_sell_notification(app):
+    sig = app.results["AAAUSDT"].signal
+    price, exit_level = sig.setup["price"], sig.setup["exit_level"]
+    with pytest.raises(ValueError):
+        app.watch.apply({"action": "add_position", "symbol": "AAA", "entry": 100, "stop": 120}, "USDT")
+    # Alış fiyatının hemen altında stop: fiyat stop'un altındaysa SAT
+    app.watch.apply({"action": "add_position", "symbol": "AAA", "entry": price * 2, "stop": price * 1.5}, "USDT")
+    pos = app.watch.positions()[0]
+    assert app.position_status(pos)["action"] == "SAT" and "zarar-durdur" in app.position_status(pos)["reason"]
+    app._check_positions()
+    app._check_positions()  # aynı durum için ikinci kez bildirim yok
+    assert sum("SAT zamanı" in t for t, _ in app.sent) == 1
+    # Stop çok aşağıda: karar 20G ortalamaya göre
+    app.watch.apply({"action": "add_position", "symbol": "AAA", "entry": price, "stop": price * 0.5}, "USDT")
+    assert len(app.watch.positions()) == 1  # aynı coin için tek pozisyon
+    st = app.position_status(app.watch.positions()[0])
+    assert st["action"] == ("SAT" if price < exit_level else "TUT")
+    payload = app.signals_payload()
+    assert payload["watch"]["positions"][0]["status"]["action"] == st["action"]
+    app.watch.apply({"action": "remove_position", "id": app.watch.positions()[0]["id"]}, "USDT")
+    assert app.watch.positions() == []

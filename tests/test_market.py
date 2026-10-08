@@ -24,22 +24,19 @@ def test_market_info_since_and_distance():
     assert info["since"] <= DOWN.index[-1]
 
 
-def test_market_is_informational_only(cfg):
-    """Gerçek veride AL sinyalleri BTC düşüşteyken daha kötü çıkmadı; bu yüzden rejim sinyali değiştirmez."""
+def test_bitcoin_trend_gates_new_buys(cfg):
+    """Yeni alım yalnızca Bitcoin 200 günlük ortalamanın üstündeyken önerilir (trend kuralı)."""
     coin = make_ohlcv(synthetic_prices(seed=BUY_SEED))
-    plain = analyze("X", coin, cfg)
-    assert plain.is_buy and plain.market is None and "by_regime" not in plain.history
     for market, name in ((UP, "up"), (DOWN, "down")):
         sig = analyze("X", coin, cfg, market=market)
-        assert sig.level == plain.level and sig.score == plain.score and sig.reasons == plain.reasons
         assert sig.market["regime"] == name
-        by = sig.history["by_regime"]
-        assert sum(by[k]["count"] for k in by) == plain.history["count"]
+        assert sig.plan["conditions"][2]["ok"] == (name == "up")
+        if name == "down":
+            assert sig.level != "STRONG_BUY"
 
 
-def test_edge_compares_signals_with_random_days(cfg):
+def test_edge_compares_old_score_with_random_days(cfg):
     sig = analyze("X", make_ohlcv(synthetic_prices(seed=BUY_SEED)), cfg)
     e = sig.edge
     assert e["horizon"] == cfg["signals"]["horizon_days"]
     assert e["all"]["count"] > e["buy"]["count"] > 0 and e["sell"]["count"] > 0
-    assert e["all"] is sig.history["baseline"]

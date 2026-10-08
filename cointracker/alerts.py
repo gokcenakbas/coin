@@ -15,8 +15,8 @@ from cointracker.signals import Signal
 
 log = logging.getLogger(__name__)
 
-EMOJI = {"STRONG_BUY": "🟢🟢", "BUY": "🟢", "HOLD": "⚪", "SELL": "🔴", "STRONG_SELL": "🔴🔴"}
-DISCLAIMER = "⚠️ Yatırım tavsiyesi değildir; teknik göstergelere dayalı otomatik analizdir."
+EMOJI = {"STRONG_BUY": "🟢🟢", "TREND": "🟢", "BUY": "🟢", "HOLD": "⚪", "SELL": "🔴", "STRONG_SELL": "🔴🔴"}
+DISCLAIMER = "⚠️ Yatırım tavsiyesi değildir; geçmiş veriyle test edilmiş kurala dayalı otomatik analizdir."
 
 
 class Notifier(Protocol):
@@ -94,36 +94,27 @@ def fmt_pct(v: float | None) -> str:
 
 def format_signal(sig: Signal, quotes: list[Quote] | None = None, detailed: bool = True) -> str:
     lines = [
-        f"{EMOJI[sig.level]} {sig.symbol}: {sig.label}  (puan {sig.score:+d})",
+        f"{EMOJI.get(sig.level, '⚪')} {sig.symbol}: {sig.label}",
         f"Fiyat: {fmt_price(sig.price)} USDT | 7g {fmt_pct(sig.change_7d)} | 30g {fmt_pct(sig.change_30d)}",
     ]
+    plan = sig.plan
+    if plan:
+        lines.append(f"📍 {plan['summary']}")
+        if plan.get("buy_low") is not None:
+            lines.append(f"   Alım bölgesi {fmt_price(plan['buy_low'])}–{fmt_price(plan['buy_high'])} | "
+                         f"zarar-durdur {fmt_price(plan['stop'])} | satış: kapanış {fmt_price(plan['exit_level'])} "
+                         f"(20G ort.) altına inerse")
+        elif plan.get("exit_level") is not None:
+            lines.append(f"   Satış seviyesi: kapanış {fmt_price(plan['exit_level'])} (20G ort.) altına inerse")
     if detailed:
-        lines += [f"  • {r}" for r in sig.reasons]
-        h = sig.history
-        if h.get("count"):
-            base = h.get("baseline", {})
-            lines.append(
-                f"Son 5 yılda bu sinyal {h['count']} gün görüldü → {h['horizon']} gün sonra "
-                f"ort. {fmt_pct(h['avg_return'])}, yükselme oranı %{h['win_rate'] * 100:.0f}"
-                + (f" (tüm günlerin ortalaması {fmt_pct(base.get('avg_return'))})" if base.get("count") else "")
-            )
-        e = sig.edge or {}
-        if e.get("buy", {}).get("count") and e.get("all", {}).get("count"):
-            lines.append(f"Geçmiş isabet (bu coin): AL'dan {e['horizon']} gün sonra yükselme %{e['buy']['win_rate'] * 100:.0f}, "
-                         f"herhangi bir günde %{e['all']['win_rate'] * 100:.0f}")
+        if plan:
+            lines += [f"  {'✓' if c['ok'] else '✗'} {c['text']}" for c in plan["conditions"]]
+        st = (sig.rule or {}).get("stats") or {}
+        if st.get("trades"):
+            lines.append(f"Bu kural bu coinde son 5 yılda: {st['trades']} işlem, başarı %{st['win_rate'] * 100:.0f}, "
+                         f"işlem başına ort. {fmt_pct(st['avg'])}")
         if sig.market:
             lines.append(f"Piyasa (Bitcoin trendi): {sig.market['label']}")
-        plan = sig.plan
-        if plan:
-            rr = f" | risk/ödül 1:{plan['risk_reward']:.1f}" if plan.get("risk_reward") else ""
-            lines += [
-                f"📍 Plan ({plan['action']}): {plan['summary']}",
-                f"   Alım bölgesi {fmt_price(plan['buy_low'])}–{fmt_price(plan['buy_high'])} | "
-                f"Hedef 1 {fmt_price(plan['target1'])} | Hedef 2 {fmt_price(plan['target2'])} | "
-                f"Zarar-durdur {fmt_price(plan['stop'])}{rr}",
-            ]
-        elif sig.is_buy and sig.stop_loss:
-            lines.append(f"Öneri: zarar-durdur ≈ {fmt_price(sig.stop_loss)}, kâr-al ≈ {fmt_price(sig.take_profit)}")
     if quotes:
         if sig.is_sell:
             best = max(quotes, key=lambda q: q.effective_sell)

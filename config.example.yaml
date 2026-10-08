@@ -30,7 +30,7 @@ backtest:
   fee: 0.001                # işlem başına komisyon (%0.1)
 
 alerts:
-  levels: [STRONG_BUY, BUY, SELL, STRONG_SELL]   # hangi sinyal değişimlerinde uyarı gelsin
+  levels: [STRONG_BUY, SELL]   # hangi sinyal değişimlerinde uyarı gelsin (GÜÇLÜ AL ve SAT)
   telegram:
     enabled: false          # TELEGRAM_BOT_TOKEN ve TELEGRAM_CHAT_ID ortam değişkenleri tanımlıysa otomatik açılır
   webhook:

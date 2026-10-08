@@ -70,20 +70,22 @@ def test_datastore_incremental_update(tmp_path):
 
 
 def _sig(symbol, level, score=3, price=100.0):
+    plan = {"action": "AL" if level == "STRONG_BUY" else "SAT", "summary": "özet", "buy_low": 95.0, "buy_high": 101.0,
+            "stop": 90.0, "exit_level": 97.0, "conditions": [{"text": "koşul", "ok": True}]}
     return Signal(symbol=symbol, date=pd.Timestamp("2026-01-01"), price=price, score=score, level=level,
-                  reasons=["neden"], stop_loss=90.0, take_profit=120.0,
-                  history={"count": 10, "avg_return": 0.05, "win_rate": 0.6, "horizon": 30,
-                           "baseline": {"count": 100, "avg_return": 0.02}})
+                  reasons=["neden"], stop_loss=90.0, plan=plan,
+                  rule={"stats": {"trades": 4, "win_rate": 0.5, "avg": 0.08}})
 
 
 def test_signal_changes_only_alert_on_transition(cfg, tmp_path):
     state = AlertState(tmp_path / "s.json")
-    first = signal_changes([_sig("BTCUSDT", "BUY"), _sig("ETHUSDT", "HOLD", 0)], state, cfg)
+    first = signal_changes([_sig("BTCUSDT", "STRONG_BUY"), _sig("ETHUSDT", "HOLD", 0)], state, cfg)
     assert [s.symbol for s in first] == ["BTCUSDT"]
-    assert signal_changes([_sig("BTCUSDT", "BUY")], state, cfg) == []
-    assert [s.level for s in signal_changes([_sig("BTCUSDT", "STRONG_BUY", 5)], state, cfg)] == ["STRONG_BUY"]
+    assert signal_changes([_sig("BTCUSDT", "STRONG_BUY")], state, cfg) == []
+    assert signal_changes([_sig("BTCUSDT", "TREND")], state, cfg) == []  # trendde: bildirim gerekmez
+    assert [s.level for s in signal_changes([_sig("BTCUSDT", "SELL", 5)], state, cfg)] == ["SELL"]
     state.save()
-    assert AlertState(tmp_path / "s.json").data["levels"]["BTCUSDT"] == "STRONG_BUY"
+    assert AlertState(tmp_path / "s.json").data["levels"]["BTCUSDT"] == "SELL"
 
 
 def test_price_alerts_fire_once_and_rearm(cfg, tmp_path):
@@ -128,7 +130,8 @@ def test_get_quotes_sorted_by_effective_cost():
 
 def test_format_signal_mentions_exchange():
     quotes = get_quotes("BTC", ["binance", "okx"], session=FakeSession())
-    text = format_signal(_sig("BTCUSDT", "BUY"), quotes)
-    assert "AL" in text and "okx" in text and "zarar-durdur" in text
+    text = format_signal(_sig("BTCUSDT", "STRONG_BUY"), quotes)
+    assert "GÜÇLÜ AL" in text and "okx" in text and "zarar-durdur" in text and "20G ort." in text
+    assert "4 işlem" in text
     sell_text = format_signal(_sig("BTCUSDT", "SELL", -3), quotes)
     assert "En iyi satış: binance" in sell_text

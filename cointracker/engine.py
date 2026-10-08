@@ -88,5 +88,6 @@ class Engine:
     def analyze_all(self, symbols: list[str], run_backtest: bool = True) -> list[CoinAnalysis]:
         results = [self.analyze_symbol(s, run_backtest) for s in symbols]
         out = [r for r in results if r is not None]
-        out.sort(key=lambda r: r.signal.score, reverse=True)
+        order = {"STRONG_BUY": 0, "TREND": 1, "SELL": 2, "HOLD": 3}
+        out.sort(key=lambda r: (order.get(r.signal.level, 9), -r.signal.score))
         return out

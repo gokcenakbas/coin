@@ -54,5 +54,6 @@ def test_analyze_produces_signal_with_reasons(cfg, ohlcv):
     assert sig.price == ohlcv["close"].iloc[-1]
     assert sig.reasons
     assert sig.history["horizon"] == cfg["signals"]["horizon_days"]
-    assert sig.history["baseline"]["count"] > 1000
-    assert sig.stop_loss < sig.price < sig.take_profit
+    assert sig.edge["all"]["count"] > 1000
+    assert sig.stop_loss < sig.price and sig.plan["exit_level"] > 0
+    assert "trades" in sig.rule["stats"]
