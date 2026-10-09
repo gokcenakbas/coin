@@ -265,3 +265,18 @@ def test_take_profit_notification_once(app, monkeypatch):
     app.watch.apply({"action": "add_position", "symbol": "AAA", "entry": price, "stop": price * 0.5,
                      "target": price * 0.9}, "USDT")
     assert app.watch.positions()[0]["target"] is None
+
+
+def test_support_notification_for_watchlist_only(app):
+    sig = app.results["AAAUSDT"].signal
+    sig.plan["support"] = {"state": "NEAR", "price": sig.price * 0.95, "touches": 3, "dist_atr": 1.2,
+                           "hit_prob": 0.55, "hold_rate": 0.59, "atr": sig.price * 0.04}
+    app._notify_support({"AAAUSDT": "FAR"})
+    assert not any("desteğe" in t for t, _ in app.sent)  # takip listesinde değil
+    app.watch.apply({"action": "toggle", "symbol": "AAA"}, "USDT")
+    app._notify_support({"AAAUSDT": "FAR"})
+    app._notify_support({"AAAUSDT": "NEAR"})  # durum değişmedi: tekrar yok
+    msgs = [(t, b) for t, b in app.sent if "desteğe yaklaşıyor" in t]
+    assert len(msgs) == 1 and "%55" in msgs[0][1] and "alım sinyali değildir" in msgs[0][1]
+    item = next(i for i in app.signals_payload()["items"] if i["symbol"] == "AAAUSDT")
+    assert item["support"]["state"] == "NEAR" and item["support"]["atr"] > 0

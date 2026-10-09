@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from cointracker.levels import cluster_levels, support_resistance, swing_points, trade_plan
+from cointracker.levels import cluster_levels, support_resistance, support_state, swing_points, trade_plan
 from cointracker.signals import analyze, score_frame
 from tests.conftest import make_ohlcv, synthetic_prices
 
@@ -56,3 +56,39 @@ def test_plan_levels_are_consistent(cfg, seed):
         assert p["buy_low"] <= p["price"] <= p["buy_high"] and p["in_buy_zone"]
     if p["action"] == "SAT":
         assert p["price"] < p["exit_level"]
+
+
+def _bounce_then(tail):
+    """100'de iki kez dönen (destek), sonra yükselen fiyat; ardından `tail` ile biten seri."""
+    legs = [np.linspace(130, 100, 40), np.linspace(100, 125, 40), np.linspace(125, 100, 40),
+            np.linspace(100, 130, 60), np.asarray(tail, dtype=float)]
+    return make_ohlcv(np.concatenate(legs))
+
+
+def test_support_state_near_at_and_far(cfg):
+    far = score_frame(_bounce_then(np.linspace(131, 150, 20)), cfg)  # yükseliyor: yaklaşmıyor
+    st = support_state(far, float(far["atr"].iloc[-1]))
+    assert st["state"] == "FAR" and not st["falling"] and st["price"] < 150
+
+    df = score_frame(_bounce_then(np.linspace(130, 100, 25)[:-5]), cfg)  # düşüyor, desteğin biraz üstünde
+    atr = float(df["atr"].iloc[-1])
+    st = support_state(df, atr)
+    dist = (df["close"].iloc[-1] - st["price"]) / atr
+    assert np.isclose(st["dist_atr"], dist) and st["falling"]
+    expected = "AT" if dist <= 0.5 else "NEAR" if dist <= 2.5 else "FAR"
+    assert st["state"] == expected
+    if expected == "NEAR":
+        assert 0 < st["hit_prob"] < 1
+
+    at = score_frame(_bounce_then(np.linspace(130, 100.3, 25)), cfg)
+    st = support_state(at, float(at["atr"].iloc[-1]))
+    assert st["state"] == "AT"  # desteğin hemen üstündeki seviye gizlenmez
+
+
+def test_support_listed_when_price_sits_right_on_it(cfg):
+    df = score_frame(_bounce_then(np.linspace(130, 100.3, 25)), cfg)
+    atr = float(df["atr"].iloc[-1])
+    hidden, _ = support_resistance(df, atr)
+    shown, _ = support_resistance(df, atr, gap_atr=0)
+    assert shown and 98 < shown[0]["price"] < 102
+    assert not hidden or hidden[0]["price"] < 98

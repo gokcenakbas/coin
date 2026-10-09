@@ -230,6 +230,7 @@ class DashboardApp:
             with self.lock:
                 self.universe = symbols
                 previous = {s: r.signal.level for s, r in self.results.items()}
+                prev_support = {s: self._support_state(r) for s, r in self.results.items()}
                 self.status.update(phase="downloading" if update else "analyzing", done=0,
                                    total=len(symbols), error=None)
             with ThreadPoolExecutor(max_workers=self.workers) as pool:
@@ -254,6 +255,7 @@ class DashboardApp:
                 self.no_data &= keep
             self._set_status(phase="ready", updated=datetime.now(timezone.utc).isoformat())
             self._notify_level_changes(previous)
+            self._notify_support(prev_support)
             self._check_positions()
             self.scan_movers(symbols)
         except Exception as exc:
@@ -306,6 +308,30 @@ class DashboardApp:
                 f"{base_asset(sig.symbol, self.quote)}: {LABELS_TR.get(previous[sig.symbol], previous[sig.symbol])} → {sig.label}",
                 (sig.plan or {}).get("summary") or f"Fiyat {sig.price:g} USDT",
             )
+
+    @staticmethod
+    def _support_state(r: CoinAnalysis) -> str | None:
+        return ((r.signal.plan or {}).get("support") or {}).get("state")
+
+    def _notify_support(self, previous: dict[str, str | None]) -> None:
+        """Takip listesindeki coin desteğe yaklaşınca ya da değince bir kez bildirim gönderir (bilgi amaçlı)."""
+        favorites = self.watch.favorites()
+        with self.lock:
+            hits = [(s, r.signal) for s, r in self.results.items()
+                    if s in favorites and s in previous and self._support_state(r) in ("NEAR", "AT")
+                    and previous[s] != self._support_state(r)]
+        for sym, sig in hits:
+            sup = sig.plan["support"]
+            base = base_asset(sym, self.quote)
+            if sup["state"] == "AT":
+                title = f"🎯 {base}: desteğe geldi ({sup['price']:g})"
+            else:
+                title = f"📉 {base}: desteğe yaklaşıyor ({sup['price']:g}, {sup['dist_atr']:.1f} ATR)"
+            body = (f"Fiyat {sig.price:g}. Testte desteğe değince tutma oranı ≈ %{sup['hold_rate'] * 100:.0f}; "
+                    f"destekte almak tek başına kârlı çıkmadı. Bilgi amaçlıdır, alım sinyali değildir.")
+            if sup.get("hit_prob"):
+                body = f"10 gün içinde desteğe değme olasılığı ≈ %{sup['hit_prob'] * 100:.0f}. " + body
+            self.notify(title, body)
 
     def position_status(self, pos: dict) -> dict:
         """Elimdeki pozisyon için satış kuralının durumu (son günlük kapanışa göre)."""
@@ -387,6 +413,8 @@ class DashboardApp:
             if s.plan else None,
             "signal_days_ago": (s.setup or {}).get("signal", {}).get("days_ago") if (s.setup or {}).get("signal") else None,
             "rule": (s.rule or {}).get("stats"),
+            "support": {k: s.plan["support"].get(k) for k in ("state", "price", "touches", "dist_atr", "hit_prob", "atr")}
+            if s.plan and s.plan.get("support") else None,
         }
 
     @staticmethod

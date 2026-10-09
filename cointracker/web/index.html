@@ -90,6 +90,7 @@ td a,.kv a{color:var(--accent);text-decoration:none}
 .lv.tgt{border-color:var(--accent)}
 .plan-btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .zone-in{color:var(--up);font-weight:600}
+.sup-tag{display:inline-block;font-size:11px;font-weight:600;padding:1px 6px;border-radius:8px;background:var(--warn-bg,rgba(247,144,9,.14));color:var(--warn);white-space:nowrap}
 @media (min-width:1200px){main.has-detail .hide-detail{display:none}
   main.has-detail #listCard{position:sticky;top:64px;align-self:start}
   main.has-detail #listCard .tablewrap{max-height:calc(100vh - 150px)}}
@@ -153,6 +154,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:4px 16px 20px
       <button data-filter="all" class="active">Tümü</button>
       <button data-filter="buy">GÜÇLÜ AL / AL</button>
       <button data-filter="trend">Trendde</button>
+      <button data-filter="sup" title="Fiyatı desteğe yaklaşan ya da destekte olan coinler (bilgi amaçlı, alım sinyali değil)">📉 Desteğe yakın</button>
       <button data-filter="sell">SAT</button>
       <button data-filter="pos">💼 Pozisyonlarım</button>
       <button data-filter="fav">⭐ Takip listem</button>
@@ -170,6 +172,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:4px 16px 20px
           <th data-sort="rsi" class="hide-sm hide-detail">RSI</th>
           <th data-sort="pct_rank_5y" class="hide-sm hide-detail" title="Fiyatın son 5 yıl içindeki konumu (0 = en ucuz)">5y %</th>
           <th data-sort="buy_dist" class="hide-sm" title="Önerilen alım bölgesi ve şu anki fiyata uzaklığı">Alım bölgesi</th>
+          <th data-sort="sup_dist" class="hide-sm" title="En yakın destek (son 1 yılın dönüş noktaları) ve uzaklığı. DESTEĞE YAKIN: fiyat desteğe doğru düşüyor; DESTEKTE: desteğin üstünde">Destek</th>
           <th data-sort="exit_dist" class="hide-sm" title="Satış seviyesi: günlük kapanış bu seviyenin (20 günlük ortalama) altına inerse sat">Satış seviyesi</th>
           <th data-sort="rule_avg" class="hide-sm hide-detail" title="Bu kuralın bu coinde son 5 yıldaki işlemleri: sayı ve işlem başına ortalama">Kural 5y</th>
         </tr></thead>
@@ -337,6 +340,7 @@ function rowValue(item, key) {
   if (key === "vol24") return live ? live.q : null;
   if (key === "symbol") return item.symbol;
   if (key === "levelrank") return {STRONG_BUY: 0, BUY: 1, TREND: 2, SELL: 3, HOLD: 4}[item.level] ?? 9;
+  if (key === "sup_dist") return item.support && item.support.price ? item.support.price / rowValue(item, "price") - 1 : null;
   if (key === "rule_avg") return item.rule && item.rule.trades ? item.rule.avg : null;
   if (key === "buy_dist" || key === "exit_dist") {
     if (!item.plan) return null;
@@ -356,6 +360,27 @@ function buyCell(i) {
   if (!p || !price || p.buy_high == null) return `<span class="muted">-</span>`;
   if (price >= p.buy_low && price <= p.buy_high) return `<span class="zone-in">✓ bölgede</span>`;
   return price > p.buy_high ? `<span class="muted">üstünde (${fmtPrice(p.buy_high)})</span>` : `<span class="muted">altında (${fmtPrice(p.buy_low)})</span>`;
+}
+
+// Destek durumu anlık fiyata göre: DESTEKTE (≤0,5 ATR) / DESTEĞE YAKIN (0,5–2,5 ATR ve son 5 günde düşüş)
+function supInfo(i) {
+  const s = i.support, price = livePrice(i);
+  if (!s || !s.price || !price) return null;
+  const dist = s.atr ? (price - s.price) / s.atr : null;
+  let tag = null;
+  if (price < s.price) tag = "KIRILDI";
+  else if (dist != null && dist <= 0.5) tag = "DESTEKTE";
+  else if (s.state === "NEAR" && dist != null && dist <= 2.5) tag = "DESTEĞE YAKIN";
+  return {tag, dist};
+}
+const supNear = i => { const x = supInfo(i); return !!(x && (x.tag === "DESTEKTE" || x.tag === "DESTEĞE YAKIN")); };
+function supCell(i) {
+  const s = i.support, price = livePrice(i);
+  if (!s) return "-";
+  if (!s.price) return `<span class="muted">yok (dipte)</span>`;
+  const x = supInfo(i) || {};
+  const tag = x.tag ? ` <span class="sup-tag" ${x.tag === "KIRILDI" ? 'style="color:var(--down)"' : ""}>${x.tag === "DESTEKTE" ? "🎯 " : x.tag === "DESTEĞE YAKIN" ? "📉 " : "⚠ "}${x.tag}</span>` : "";
+  return `${fmtPrice(s.price)} <span class="muted">${fmtPct(s.price / price - 1)}</span>${tag}`;
 }
 
 function tgtCell(i) {
@@ -380,7 +405,7 @@ function renderTable() {
   const q = state.search.trim().toUpperCase(), favs = favSet();
   const pass = i => state.filter === "all" || (state.filter === "fav" ? favs.has(i.symbol) :
     state.filter === "pos" ? !!posFor(i.symbol) : state.filter === "buy" ? (i.level === "STRONG_BUY" || i.level === "BUY") :
-    state.filter === "trend" ? i.level === "TREND" : i.level === "SELL");
+    state.filter === "trend" ? i.level === "TREND" : state.filter === "sup" ? supNear(i) : i.level === "SELL");
   let items = state.items.filter(i => pass(i) && (!q || i.base.includes(q)));
   const {key, dir} = state.sort;
   items.sort((a, b) => {
@@ -401,9 +426,10 @@ function renderTable() {
       <td class="hide-sm hide-detail">${i.rsi == null ? "-" : i.rsi.toFixed(0)}</td>
       <td class="hide-sm hide-detail">${i.pct_rank_5y == null ? "-" : "%" + (i.pct_rank_5y * 100).toFixed(0)}</td>
       <td class="hide-sm" data-f="buy">${buyCell(i)}</td>
+      <td class="hide-sm" data-f="sup">${supCell(i)}</td>
       <td class="hide-sm" data-f="tgt">${tgtCell(i)}</td>
       <td class="hide-sm hide-detail">${i.rule && i.rule.trades ? `<span class="${cls(i.rule.avg)}">${fmtPct(i.rule.avg)}</span> <span class="muted">(${i.rule.trades})</span>` : "-"}</td></tr>`;
-  }).join("") || `<tr><td colspan="10" class="muted" style="text-align:center;padding:24px">${state.filter === "fav" ? "Takip listeniz boş — bir coinin yanındaki ☆ işaretine tıklayın." : state.filter === "pos" ? "Kayıtlı pozisyon yok — bir coinin planında \"Aldım\" düğmesini kullanın." : state.items.length ? "Bu filtreye uyan coin yok." : "Coin listesi yükleniyor…"}</td></tr>`;
+  }).join("") || `<tr><td colspan="11" class="muted" style="text-align:center;padding:24px">${state.filter === "fav" ? "Takip listeniz boş — bir coinin yanındaki ☆ işaretine tıklayın." : state.filter === "pos" ? "Kayıtlı pozisyon yok — bir coinin planında \"Aldım\" düğmesini kullanın." : state.items.length ? "Bu filtreye uyan coin yok." : "Coin listesi yükleniyor…"}</td></tr>`;
   tbody.querySelectorAll("tr[data-s]").forEach(tr => state.rowEls[tr.dataset.s] = tr);
 }
 
@@ -452,6 +478,7 @@ function onTickers(list) {
       const item = state.bySym[t.s];
       if (item.plan) {
         tr.querySelector('[data-f="buy"]').innerHTML = buyCell(item);
+        tr.querySelector('[data-f="sup"]').innerHTML = supCell(item);
         tr.querySelector('[data-f="tgt"]').innerHTML = tgtCell(item);
       }
     }
@@ -812,6 +839,22 @@ function renderPosition(p) {
     <div class="plan-btns"><button data-posdel="${esc(pos.id)}">${sell ? "✓ Sattım, kaydı sil" : "✕ Pozisyonu sil"}</button></div></div>`;
 }
 
+function renderSupport(s) {
+  const sup = s.plan.support;
+  if (!sup || !sup.price) return "";
+  const x = supInfo({symbol: s.symbol, price: s.plan.price, support: sup}) || {};
+  if (!x.tag) return "";
+  const msg = x.tag === "KIRILDI" ? `Fiyat ${fmtPrice(sup.price)} desteğinin altına indi; destek kırılırsa sonraki destek ${sup.below && sup.below.length ? fmtPrice(sup.below[0]) : "yok"}.`
+    : x.tag === "DESTEKTE" ? `Fiyat ${fmtPrice(sup.price)} desteğinin hemen üstünde (${sup.touches}× dokunulmuş seviye).`
+    : `Fiyat düşüyor ve ${fmtPrice(sup.price)} desteğine ${fmtPct(sup.price / ((state.live[state.selected] || {}).c || s.plan.price) - 1)} uzakta (${(x.dist || 0).toFixed(1).replace(".", ",")} ATR).
+       Testte bu uzaklıktan 10 gün içinde desteğe değme oranı ≈ %${Math.round((sup.hit_prob || 0) * 100)}.`;
+  return `<div class="posbox" style="border-color:var(--warn)"><b>${x.tag === "DESTEKTE" ? "🎯" : x.tag === "DESTEĞE YAKIN" ? "📉" : "⚠"} ${x.tag}</b> — ${msg}
+    <p class="muted" style="margin:6px 0 0">Bilgi amaçlıdır, <b>alım sinyali değildir</b>: 33 coin / 5 yıllık testte destekler değildiğinde
+    ≈ %59 tuttu (yazı-tura'dan biraz iyi); destekte alıp (stop desteğin 1 ATR altı, hedef ilk direnç) satmak eğitimde −%0,8, testte +%0,1
+    getirdi — rastgele alımdan farkı yok. Desteğe yakın coinde alım düşünüyorsanız trendin yönüne (GÜÇLÜ AL/AL koşulları) bakın ve
+    zarar-durdurunuzu desteğin altına koyun.</p></div>`;
+}
+
 function renderPlan(s) {
   const p = s.plan;
   const price = (state.live[state.selected] || {}).c || p.price;
@@ -828,7 +871,8 @@ function renderPlan(s) {
       ${p.exit_level != null ? `<div class="lv tgt"><span>Satış seviyesi (20G ort.)</span><b>${fmtPrice(p.exit_level)}</b> ${dist(p.exit_level)}</div>` : ""}
       ${(p.resistances || []).slice(0, 2).map((r, i) => `<div class="lv tgt"><span>Kâr alma yeri ${i + 1} (direnç)</span><b>${fmtPrice(r.price)}</b> ${dist(r.price)} <span class="muted">${r.touches}× dokunuldu</span></div>`).join("")}
       ${(p.resistances || []).length ? "" : `<div class="lv tgt"><span>Kâr alma yeri</span><b>-</b> <span class="muted">üstte 1 yıllık direnç yok (fiyat zirvede)</span></div>`}
-      ${(p.supports || []).slice(0, 1).map(r => `<div class="lv"><span>En yakın destek</span><b>${fmtPrice(r.price)}</b> ${dist(r.price)}</div>`).join("")}
+      ${(p.supports || []).slice(0, 2).map((r, i) => `<div class="lv"><span>${i ? "Sonraki destek" : "En yakın destek"}</span><b>${fmtPrice(r.price)}</b> ${dist(r.price)} <span class="muted">${r.touches}× dokunuldu</span></div>`).join("")}
+      ${(p.supports || []).length ? "" : `<div class="lv"><span>Destek</span><b>-</b> <span class="muted">altta destek yok (fiyat 5 yılın dibinde)</span></div>`}
       ${p.action === "AL" && p.stop ? `<div class="lv stop"><span>Zarar-durdur (şimdi alırsanız)</span><b>${fmtPrice(p.stop)}</b> ${dist(p.stop)}</div>` : ""}
     </div>
     <p class="muted" style="margin:8px 0 0"><b>Satış kuralı:</b> günlük kapanış 20 günlük ortalamanın altına inerse ertesi gün satın; fiyat alışın 2 ATR altına
@@ -839,6 +883,7 @@ function renderPlan(s) {
       %30–37'den %40–45'e çıkardı ama ortalama kârı yaklaşık yarıya indirdi (+%8 / +%14 yerine +%5 / +%7); <i>tamamını</i> dirençte satmak
       kârın neredeyse hepsini kaçırdı (+%0,2–0,6). Yani en çok kazandıran: tamamını kurala bırakmak; daha az dalgalı yol: yarısını dirençte satmak.
       Sinyaller ${trDate(p.as_of)} günlük kapanışına göredir.</p>
+    ${renderSupport(s)}
     ${renderPosition(p)}
     <div id="pos">
       <h2 style="margin-bottom:8px">Ne kadar alınmalı?</h2>

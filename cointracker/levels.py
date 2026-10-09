@@ -45,31 +45,71 @@ def cluster_levels(prices: list[float], tolerance: float) -> list[dict]:
 
 
 def support_resistance(df: pd.DataFrame, atr: float, lookback: int = 365, window: int = 5,
-                       limit: int = 3) -> tuple[list[dict], list[dict]]:
+                       limit: int = 3, gap_atr: float = 0.5) -> tuple[list[dict], list[dict]]:
     """(destekler, dirençler) — en yakından uzağa, her biri en fazla `limit` adet.
 
-    Son 1 yılda fiyatın altında (veya üstünde) hiç seviye yoksa — ör. fiyat yıllık dipteyse —
-    o taraf için son 5 yıla bakılır.
+    Fiyata `gap_atr` ATR'den yakın seviyeler "şu anki fiyat" sayılır ve listeye girmez (0 verilirse
+    fiyatın hemen altındaki destek de listelenir). Son 1 yılda fiyatın altında (veya üstünde) hiç seviye
+    yoksa — ör. fiyat yıllık dipteyse — o taraf için son 5 yıla bakılır.
     """
-    supports, resistances = _levels(df, atr, lookback, window)
+    supports, resistances = _levels(df, atr, lookback, window, gap_atr)
     if (not supports or not resistances) and len(df) > lookback:
-        long_s, long_r = _levels(df, atr, FIVE_YEARS_DAYS, window)
+        long_s, long_r = _levels(df, atr, FIVE_YEARS_DAYS, window, gap_atr)
         supports = supports or long_s
         resistances = resistances or long_r
     return supports[:limit], resistances[:limit]
 
 
-def _levels(df: pd.DataFrame, atr: float, lookback: int, window: int) -> tuple[list[dict], list[dict]]:
+def _levels(df: pd.DataFrame, atr: float, lookback: int, window: int,
+            gap_atr: float = 0.5) -> tuple[list[dict], list[dict]]:
     recent = df.iloc[-lookback:]
     price = float(recent["close"].iloc[-1])
     highs, lows = swing_points(recent, window)
     tolerance = max(0.01, 0.6 * atr / price) if atr and price else 0.01
     levels = cluster_levels(list(highs) + list(lows), tolerance)
     # Fiyata yarım ATR'den yakın seviyeler "şu anki fiyat" sayılır, destek/direnç listesine girmez
-    gap = 0.5 * atr if atr else price * 0.005
+    gap = gap_atr * atr if atr else price * 0.005 * (gap_atr > 0)
     supports = sorted((lv for lv in levels if lv["price"] < price - gap), key=lambda lv: -lv["price"])
     resistances = sorted((lv for lv in levels if lv["price"] > price + gap), key=lambda lv: lv["price"])
     return supports, resistances
+
+
+# tools/research/support.py (Ekim 2026, 33 coin, 5 yıl): kapanış en yakın desteğin üstünde ve son 5 günde
+# düşüyorken 10 gün içinde desteğe değme oranı (uzaklık ATR cinsinden) ve değince tutma oranı.
+NEAR_HIT_RATES = [(1.0, 0.77), (1.75, 0.55), (2.5, 0.27)]
+SUPPORT_HOLD_RATE = 0.59
+NEAR_MAX_ATR = 2.5
+AT_SUPPORT_ATR = 0.5
+
+
+def support_state(df: pd.DataFrame, atr: float | None) -> dict | None:
+    """En yakın destek ve fiyatın ona göre durumu.
+
+    state: "AT"   — fiyat desteğin 0,5 ATR yakınında (desteğe değiyor)
+           "NEAR" — 0,5–2,5 ATR üstünde ve son 5 günde düşüyor (desteğe yaklaşıyor)
+           "FAR"  — diğer durumlar
+           "NONE" — altta destek yok (fiyat 5 yılın dibinde)
+    """
+    if not atr or len(df) < 30:
+        return None
+    price = float(df["close"].iloc[-1])
+    supports, _ = support_resistance(df, atr, limit=3, gap_atr=0)
+    if not supports:
+        return {"state": "NONE", "price": None, "atr": atr, "touches": 0, "dist_atr": None, "dist_pct": None,
+                "falling": None, "hit_prob": None, "hold_rate": SUPPORT_HOLD_RATE}
+    s = supports[0]
+    dist = (price - s["price"]) / atr
+    falling = len(df) > 5 and price < float(df["close"].iloc[-6])
+    if dist <= AT_SUPPORT_ATR:
+        state = "AT"
+    elif dist <= NEAR_MAX_ATR and falling:
+        state = "NEAR"
+    else:
+        state = "FAR"
+    hit = next((p for lim, p in NEAR_HIT_RATES if dist <= lim), None) if state == "NEAR" else None
+    return {"state": state, "price": s["price"], "touches": s["touches"], "dist_atr": dist, "atr": atr,
+            "dist_pct": s["price"] / price - 1, "falling": falling, "hit_prob": hit, "hold_rate": SUPPORT_HOLD_RATE,
+            "below": [lv["price"] for lv in supports[1:]]}
 
 
 def _pct(a: float, b: float) -> float:

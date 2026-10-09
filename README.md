@@ -209,6 +209,21 @@ alışın en az 1 ATR üstündeki ilk dirence gelince 🎯 bildirimi gelir). Öl
 Yani dirençte kısmi satış daha sık kazandırır ama toplam kârı yarıya indirir; tamamını dirençte satmak kârı neredeyse
 sıfırlar. En yüksek kâr tamamını kurala bırakmakta; daha az dalgalı yol yarısını dirençte satmak.
 
+**Desteğe yakın (📉 DESTEĞE YAKIN / 🎯 DESTEKTE)** — bilgi amaçlı etiket, alım sinyali değildir. Listede "Destek"
+sütunu en yakın desteği (son 1 yılın dönüş noktaları; fiyatın hemen altındaki dahil) ve uzaklığını gösterir.
+Fiyat desteğin 0,5–2,5 ATR üstünde ve son 5 günde düşüyorsa DESTEĞE YAKIN, 0,5 ATR içindeyse DESTEKTE yazar;
+takip listesindeki coinler için bildirim gelir. `tools/research/support.py` ölçümü (33 coin, 5 yıl):
+
+| Uzaklık | 10 gün içinde desteğe değme |
+|---|---|
+| 0,5–1 ATR | %76–78 |
+| 1–1,75 ATR | %55 |
+| 1,75–2,5 ATR | %26–27 |
+
+Desteğe değince tutma oranı ≈ %58–60. Destekte alıp (stop desteğin 1 ATR altı, hedef ilk direnç) satmak eğitimde
+−%0,8, testte +%0,1 getirdi; rastgele alım +%0,2 / −%0,5. Yani "desteğe gelecek" tahmini işe yarıyor, ama destekte almak
+tek başına kâr getirmiyor; bu yüzden ayrı bir AL sinyali yapılmadı.
+
 **SAT:** günlük kapanış **20 günlük ortalamanın altına** inerse ertesi gün; ayrıca alış fiyatının **2 ATR altı**
 zarar-durdur. Trend sürdükçe tutulur. Uygulamada "✅ Aldım" ile alış fiyatınızı kaydederseniz
 satış kuralı tetiklendiğinde Mac bildirimi gelir (💼 Pozisyonlarım).
