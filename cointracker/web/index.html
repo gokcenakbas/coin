@@ -435,6 +435,7 @@ function renderTable() {
 
 /* ---------------- Anlık fiyat akışı (tüm coinler, saniyede bir) ---------------- */
 let marketWs = null, marketRetry = null, lastTickAt = 0;
+const tickAt = {};  // coin → son fiyat güncellemesinin zamanı
 function connectMarket(attempt = 0) {
   clearTimeout(marketRetry);
   if (marketWs) { marketWs.onclose = null; try { marketWs.close(); } catch (e) {} }
@@ -458,9 +459,19 @@ function onTickers(list) {
   const now = Date.now();
   for (const t of list) {
     if (!state.bySym[t.s]) continue;
+    applyTick(t.s, {c: +t.c, o: +t.o, h: +t.h, l: +t.l, q: +t.q}, now);
+  }
+}
+
+// Tek bir coinin anlık fiyatını uygular: liste satırı, başlık, alarmlar, pozisyon.
+// Hem tüm piyasa akışından hem de seçili coinin mum akışından çağrılır; böylece başlıktaki fiyat
+// grafikle her zaman aynıdır (piyasa akışı takılsa bile).
+function applyTick(sym, tick, now = Date.now()) {
+  {
+    const t = {s: sym};
     const prev = state.live[t.s];
-    const tick = {c: +t.c, o: +t.o, h: +t.h, l: +t.l, q: +t.q};
     state.live[t.s] = tick;
+    tickAt[t.s] = now;
     trackMove(t.s, tick.c, now);
     checkAlarms(t.s, tick.c);
     checkPosition(t.s, tick.c);
@@ -472,9 +483,9 @@ function onTickers(list) {
         pc.classList.remove("flash-up", "flash-down"); void pc.offsetWidth;
         pc.classList.add(tick.c > prev.c ? "flash-up" : "flash-down");
       }
-      const chg = tick.c / tick.o - 1, cc = tr.querySelector('[data-f="chg"]');
+      const chg = tick.o ? tick.c / tick.o - 1 : null, cc = tr.querySelector('[data-f="chg"]');
       cc.textContent = fmtPct(chg); cc.className = cls(chg);
-      tr.querySelector('[data-f="vol"]').textContent = fmtUsd(tick.q);
+      if (tick.q != null) tr.querySelector('[data-f="vol"]').textContent = fmtUsd(tick.q);
       const item = state.bySym[t.s];
       if (item.plan) {
         tr.querySelector('[data-f="buy"]').innerHTML = buyCell(item);
@@ -752,6 +763,12 @@ function connectKline(sym, iv, attempt = 0) {
     if (!k || sym !== state.selected || iv !== state.interval) return;
     const bar = {time: k.t / 1000, open: +k.o, high: +k.h, low: +k.l, close: +k.c, volume: +k.v};
     try { candleS.update(bar); volS.update(volBar(bar)); } catch (e) { /* eski mum, yoksay */ }
+    // Başlıktaki fiyat grafikle aynı kalsın: 24s açılış/hacim piyasa akışındaki son değerden korunur
+    const now = Date.now(), prev = state.live[sym] || {};
+    if (!tickAt[sym] || now - tickAt[sym] > 1500 || prev.c !== bar.close)
+      applyTick(sym, {...prev, c: bar.close}, now);
+    // Piyasa akışı 30 sn'dir veri getirmiyorsa (bağlantı açık görünse de) yeniden bağlan
+    if (lastTickAt && now - lastTickAt > 30e3) { lastTickAt = now; connectMarket(); }
     $("#lastTick").textContent = "Son işlem: " + new Date().toLocaleTimeString("tr-TR");
   };
   ws.onclose = () => {
@@ -763,7 +780,7 @@ function renderHeadPrice() {
   const item = state.bySym[state.selected], live = state.live[state.selected];
   const price = live ? live.c : item ? item.price : null;
   $("#dPx").textContent = fmtPrice(price) + " $";
-  const chg = live ? live.c / live.o - 1 : null;
+  const chg = live && live.o ? live.c / live.o - 1 : null;
   $("#dChg").innerHTML = chg == null ? "" : `<span class="${cls(chg)}">${fmtPct(chg)} (24s)</span>`;
 }
 
@@ -1196,7 +1213,7 @@ setInterval(() => {
   const now = Date.now(), slept = now - lastBeat > 60e3;
   lastBeat = now;
   if (slept) refreshAll("Uykudan uyanıldı, veriler güncellendi");
-  else if (lastTickAt && now - lastTickAt > 90e3 && document.visibilityState === "visible") connectMarket();
+  else if (lastTickAt && now - lastTickAt > 30e3 && document.visibilityState === "visible") { lastTickAt = now; connectMarket(); }
 }, 5000);
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && lastTickAt && Date.now() - lastTickAt > 120e3)
