@@ -33,6 +33,13 @@ main{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;padding:14px 16px
 @media (min-width:1200px){main.has-detail{grid-template-columns:minmax(0,1fr) minmax(0,1.25fr)}}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px}
 .card h2{font-size:13px;margin:0 0 8px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+/* Açılır-kapanır kartlar: başlığa tıklayınca küçülür; tercih tarayıcıda saklanır */
+.card > h2.fold{cursor:pointer;user-select:none}
+.card > h2.fold:hover{color:var(--fg,inherit)}
+.card > h2.fold::before{content:"▾";display:inline-block;width:14px;transition:transform .15s}
+.card.collapsed > h2.fold::before{transform:rotate(-90deg)}
+.card.collapsed > h2.fold{margin-bottom:0}
+.card.collapsed > :not(h2.fold){display:none !important}
 .toolbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px}
 .tablewrap{overflow:auto;max-height:calc(100vh - 210px)}
 table{border-collapse:collapse;width:100%}
@@ -1219,6 +1226,48 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && lastTickAt && Date.now() - lastTickAt > 120e3)
     refreshAll("Veriler eskimişti, güncellendi");
 });
+
+/* ---------------- Açılır-kapanır kartlar (akordeon) ---------------- */
+const FOLD_KEY = "cardsCollapsed";
+function loadFolds() { try { return new Set(JSON.parse(localStorage.getItem(FOLD_KEY) || "[]")); } catch (e) { return new Set(); } }
+function saveFolds(set) { try { localStorage.setItem(FOLD_KEY, JSON.stringify([...set])); } catch (e) { /* gizli pencere vb. */ } }
+// Kartın kimliği: id'si varsa o, yoksa başlık metni (sayılar atılır; böylece her coinde aynı kart aynı kalır)
+const foldKey = (card, h) => card.id || h.textContent.replace(/[\d.,%±+−-]+/g, "").replace(/\s+/g, " ").trim().slice(0, 40);
+function applyFolds(root = document) {
+  const set = loadFolds();
+  root.querySelectorAll(".card > h2:first-child").forEach(h => {
+    const card = h.parentElement;
+    if (card.id === "detail") return;
+    if (!h.classList.contains("fold")) {
+      h.classList.add("fold"); h.tabIndex = 0; h.setAttribute("role", "button"); h.title = "Aç / küçült";
+    }
+    const collapsed = set.has(foldKey(card, h));
+    card.classList.toggle("collapsed", collapsed);
+    h.setAttribute("aria-expanded", String(!collapsed));
+  });
+}
+function toggleFold(h) {
+  const card = h.parentElement, key = foldKey(card, h), set = loadFolds();
+  const collapsed = !card.classList.contains("collapsed");
+  card.classList.toggle("collapsed", collapsed);
+  h.setAttribute("aria-expanded", String(!collapsed));
+  collapsed ? set.add(key) : set.delete(key);
+  saveFolds(set);
+}
+document.addEventListener("click", e => {
+  const h = e.target.closest(".card > h2.fold");
+  if (h) toggleFold(h);
+});
+document.addEventListener("keydown", e => {
+  const h = e.target.closest && e.target.closest(".card > h2.fold");
+  if (h && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggleFold(h); }
+});
+// Sonradan çizilen kartlar (coin ayrıntıları, alarmlar) da aynı tercihle açılsın
+new MutationObserver(muts => {
+  for (const m of muts) for (const n of m.addedNodes)
+    if (n.nodeType === 1 && (n.matches(".card") || n.querySelector(".card > h2"))) { applyFolds(); return; }
+}).observe(document.body, {childList: true, subtree: true});
+applyFolds();
 
 loadSignals().then(() => {
   // Açılışta bir coin seç: adres çubuğundaki, takip listesindeki ilk coin ya da BTC
