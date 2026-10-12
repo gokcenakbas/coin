@@ -27,6 +27,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "quote": "USDT",
         "symbols": ["BTC", "ETH", "SOL", "BNB", "XRP"],
         "exclude": [],
+        # "Sakin liste" ölçütleri (arayüzdeki 🛡 düğmesi): günlük oynaklık, veri yaşı, dolaşımdaki arz oranı,
+        # piyasa değeri sırası. Bkz. cointracker/marketcap.py ve tools/research/quality.py
+        "quality": {"max_atr_pct": 0.075, "min_age_days": 365, "min_float": 0.5, "max_rank": 200},
     },
     "signals": {
         "strong_buy_threshold": 4,

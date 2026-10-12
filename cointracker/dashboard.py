@@ -30,6 +30,7 @@ from cointracker.data import base_asset, normalize_symbol
 from cointracker.engine import CoinAnalysis, Engine
 from cointracker.exchanges import get_quotes
 from cointracker.indicators import add_indicators
+from cointracker.marketcap import MarketCapStore, evaluate as evaluate_quality
 from cointracker.live import INTRADAY_TIMEFRAMES, orderbook_summary, ticker_summary, timeframe_signal
 from cointracker.movers import candidate
 from cointracker.signals import LABELS_TR, classify
@@ -179,6 +180,8 @@ class DashboardApp:
         self.no_data: set[str] = set()
         self.status = {"phase": "starting", "done": 0, "total": 0, "updated": None, "error": None}
         self.watch = WatchStore(Path(cfg["data_dir"]) / "watchlist.json")
+        self.mcap = MarketCapStore(cfg["data_dir"])
+        self.quality_rules = cfg["universe"].get("quality", {})
         self._detail_cache: dict[str, tuple[float, dict]] = {}
         self._refresh_lock = threading.Lock()
         self.movers: dict = {"updated": None, "items": [], "baseline": {}}
@@ -227,6 +230,7 @@ class DashboardApp:
     def _refresh(self, update: bool) -> None:
         try:
             symbols = self.fixed_symbols or self.engine.universe()
+            self.mcap.refresh()
             with self.lock:
                 self.universe = symbols
                 previous = {s: r.signal.level for s, r in self.results.items()}
@@ -398,10 +402,13 @@ class DashboardApp:
         return thread
 
     # ---- API ----------------------------------------------------------------
-    @staticmethod
-    def _summary(r: CoinAnalysis, base: str) -> dict:
+    def quality(self, r: CoinAnalysis, base: str) -> dict:
+        return evaluate_quality(r.signal.price_quality, self.mcap.get(base), self.quality_rules)
+
+    def _summary(self, r: CoinAnalysis, base: str) -> dict:
         s, bt = r.signal, r.backtest
         return {
+            "quality": self.quality(r, base),
             "symbol": s.symbol, "base": base, "price": s.price,
             "score": s.score, "level": s.level, "label": s.label, "rsi": s.rsi,
             "pct_rank_5y": s.pct_rank_5y, "drawdown_5y": s.drawdown_5y,
@@ -506,6 +513,7 @@ class DashboardApp:
             "symbol": symbol,
             "base": base_asset(symbol, self.quote),
             "signal": signal,
+            "quality": self.quality(analysis, base_asset(symbol, self.quote)) if analysis else None,
             "backtest": asdict(analysis.backtest) if analysis and analysis.backtest else None,
             "timeframes": timeframes,
             "orderbook": orderbook,

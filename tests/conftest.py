@@ -38,3 +38,10 @@ def cfg(tmp_path):
 @pytest.fixture
 def ohlcv():
     return make_ohlcv(synthetic_prices())
+
+
+@pytest.fixture(autouse=True)
+def no_coingecko(monkeypatch):
+    """Testler CoinGecko'ya bağlanmasın; isteyen test kendi verisini verir."""
+    from cointracker import marketcap
+    monkeypatch.setattr(marketcap, "fetch_markets", lambda *a, **k: {})

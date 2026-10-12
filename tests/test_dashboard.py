@@ -280,3 +280,12 @@ def test_support_notification_for_watchlist_only(app):
     assert len(msgs) == 1 and "%55" in msgs[0][1] and "alım sinyali değildir" in msgs[0][1]
     item = next(i for i in app.signals_payload()["items"] if i["symbol"] == "AAAUSDT")
     assert item["support"]["state"] == "NEAR" and item["support"]["atr"] > 0
+
+
+def test_quality_in_payloads(app):
+    app.mcap.data = {"AAA": {"rank": 50, "circulating": 30, "total": 100, "market_cap": 1e9}}
+    items = {i["symbol"]: i for i in app.signals_payload()["items"]}
+    qa, qb = items["AAAUSDT"]["quality"], items["BBBUSDT"]["quality"]
+    assert qa["checks"]["float"] is False and not qa["calm_list"] and qa["rank"] == 50
+    assert qb["checks"]["float"] is None and qb["age_days"] > 365 and qb["atr_pct"] > 0
+    assert app.coin_payload("AAAUSDT")["quality"]["float"] == pytest.approx(0.3)

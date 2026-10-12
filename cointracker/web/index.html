@@ -165,6 +165,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:4px 16px 20px
       <button data-filter="sell">SAT</button>
       <button data-filter="pos">💼 Pozisyonlarım</button>
       <button data-filter="fav">⭐ Takip listem</button>
+      <button id="calmToggle" title="Yalnızca sakin coinler: son 90 günde günlük oynaklık ≤ %7,5, en az 1 yıllık veri, arzın en az yarısı dolaşımda, piyasa değeri sırası ≤ 200. Diğer filtrelerle birlikte çalışır.">🛡 Sakin liste</button>
       <span class="spacer"></span>
       <input type="search" id="search" placeholder="Coin ara…">
     </div>
@@ -176,6 +177,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:4px 16px 20px
           <th data-sort="chg24">24s</th>
           <th data-sort="vol24" class="hide-sm hide-detail">24s Hacim</th>
           <th data-sort="levelrank">Sinyal</th>
+          <th data-sort="vol" class="hide-sm hide-detail" title="Son 90 günde ortalama günlük oynaklık (ATR / fiyat). 🛡 = sakin listede">Oynaklık</th>
           <th data-sort="rsi" class="hide-sm hide-detail">RSI</th>
           <th data-sort="pct_rank_5y" class="hide-sm hide-detail" title="Fiyatın son 5 yıl içindeki konumu (0 = en ucuz)">5y %</th>
           <th data-sort="buy_dist" class="hide-sm" title="Önerilen alım bölgesi ve şu anki fiyata uzaklığı">Alım bölgesi</th>
@@ -251,6 +253,7 @@ const fmtUsd = v => v == null ? "-" : "$" + compact.format(v);
 
 const state = {
   items: [], bySym: {}, live: {}, filter: "all", search: "", sort: {key: "levelrank", dir: 1},
+  calmOnly: (() => { try { return localStorage.getItem("calmOnly") === "1"; } catch (e) { return false; } })(),
   selected: null, interval: "1h", rowEls: {}, hist: {}, lastMove: {}, moves: [], detailTimer: null,
   watch: {favorites: [], alarms: [], positions: []}, firedPos: new Set(), app: false, plan: null, baseline: {}, lastEarly: {}, firedAlarms: new Set(), autoSelected: false,
 };
@@ -347,6 +350,7 @@ function rowValue(item, key) {
   if (key === "vol24") return live ? live.q : null;
   if (key === "symbol") return item.symbol;
   if (key === "levelrank") return {STRONG_BUY: 0, BUY: 1, TREND: 2, SELL: 3, HOLD: 4}[item.level] ?? 9;
+  if (key === "vol") return item.quality ? item.quality.atr_pct : null;
   if (key === "sup_dist") return item.support && item.support.price ? item.support.price / rowValue(item, "price") - 1 : null;
   if (key === "rule_avg") return item.rule && item.rule.trades ? item.rule.avg : null;
   if (key === "buy_dist" || key === "exit_dist") {
@@ -390,6 +394,13 @@ function supCell(i) {
   return `${fmtPrice(s.price)} <span class="muted">${fmtPct(s.price / price - 1)}</span>${tag}`;
 }
 
+function volCell(i) {
+  const q = i.quality;
+  if (!q || q.atr_pct == null) return "-";
+  const why = q.calm_list ? "Sakin listede" : "Sakin listede değil: " + q.reasons.join("; ");
+  return `<span title="${esc(why)}" class="${q.checks.calm ? "" : "warn"}">%${(q.atr_pct * 100).toFixed(1).replace(".", ",")}</span>${q.calm_list ? " 🛡" : ""}`;
+}
+
 function tgtCell(i) {
   const p = i.plan, price = livePrice(i);
   if (!p || !price || p.exit_level == null) return "-";
@@ -413,7 +424,8 @@ function renderTable() {
   const pass = i => state.filter === "all" || (state.filter === "fav" ? favs.has(i.symbol) :
     state.filter === "pos" ? !!posFor(i.symbol) : state.filter === "buy" ? (i.level === "STRONG_BUY" || i.level === "BUY") :
     state.filter === "trend" ? i.level === "TREND" : state.filter === "sup" ? supNear(i) : i.level === "SELL");
-  let items = state.items.filter(i => pass(i) && (!q || i.base.includes(q)));
+  const calm = i => !state.calmOnly || (i.quality && i.quality.calm_list);
+  let items = state.items.filter(i => pass(i) && calm(i) && (!q || i.base.includes(q)));
   const {key, dir} = state.sort;
   items.sort((a, b) => {
     const x = rowValue(a, key), y = rowValue(b, key);
@@ -430,13 +442,14 @@ function renderTable() {
       <td data-f="chg" class="${cls(chg)}">${fmtPct(chg)}</td>
       <td data-f="vol" class="hide-sm hide-detail">${fmtUsd(rowValue(i, "vol24"))}</td>
       <td>${posFor(i.symbol) ? "💼 " : ""}<span class="badge b-${i.level}">${esc(i.label)}</span>${(i.level === "STRONG_BUY" || i.level === "BUY") && i.signal_days_ago != null ? ` <span class="muted">${i.signal_days_ago ? i.signal_days_ago + " g önce" : "yeni"}</span>` : ""}</td>
+      <td class="hide-sm hide-detail">${volCell(i)}</td>
       <td class="hide-sm hide-detail">${i.rsi == null ? "-" : i.rsi.toFixed(0)}</td>
       <td class="hide-sm hide-detail">${i.pct_rank_5y == null ? "-" : "%" + (i.pct_rank_5y * 100).toFixed(0)}</td>
       <td class="hide-sm" data-f="buy">${buyCell(i)}</td>
       <td class="hide-sm" data-f="sup">${supCell(i)}</td>
       <td class="hide-sm" data-f="tgt">${tgtCell(i)}</td>
       <td class="hide-sm hide-detail">${i.rule && i.rule.trades ? `<span class="${cls(i.rule.avg)}">${fmtPct(i.rule.avg)}</span> <span class="muted">(${i.rule.trades})</span>` : "-"}</td></tr>`;
-  }).join("") || `<tr><td colspan="11" class="muted" style="text-align:center;padding:24px">${state.filter === "fav" ? "Takip listeniz boş — bir coinin yanındaki ☆ işaretine tıklayın." : state.filter === "pos" ? "Kayıtlı pozisyon yok — bir coinin planında \"Aldım\" düğmesini kullanın." : state.items.length ? "Bu filtreye uyan coin yok." : "Coin listesi yükleniyor…"}</td></tr>`;
+  }).join("") || `<tr><td colspan="12" class="muted" style="text-align:center;padding:24px">${state.filter === "fav" ? "Takip listeniz boş — bir coinin yanındaki ☆ işaretine tıklayın." : state.filter === "pos" ? "Kayıtlı pozisyon yok — bir coinin planında \"Aldım\" düğmesini kullanın." : state.items.length ? (state.calmOnly ? "Bu filtreye uyan sakin coin yok — 🛡 Sakin liste düğmesini kapatmayı deneyin." : "Bu filtreye uyan coin yok.") : "Coin listesi yükleniyor…"}</td></tr>`;
   tbody.querySelectorAll("tr[data-s]").forEach(tr => state.rowEls[tr.dataset.s] = tr);
 }
 
@@ -995,6 +1008,21 @@ function saveSettings() {
   watchAction({action: "settings", capital, risk_pct: risk}).catch(err => toast("Hata", err.message));
 }
 
+function renderQuality(q) {
+  const mark = ok => ok === true ? `<span class="up">✓</span>` : ok === false ? `<span class="down">✗</span>` : `<span class="muted">?</span>`;
+  const big = v => v == null ? "-" : v >= 1e9 ? (v / 1e9).toFixed(1).replace(".", ",") + " milyar $" : (v / 1e6).toFixed(0) + " milyon $";
+  return `<section class="card"><h2>Coin profili — sakin liste</h2>
+    <p style="margin:0 0 6px"><b>${q.calm_list ? "🛡 Sakin listede" : "Sakin listede değil"}</b>${q.calm_list ? "" : ": " + esc(q.reasons.join("; "))}</p>
+    ${kv([
+      [`${mark(q.checks.calm)} Günlük oynaklık (90 gün)`, q.atr_pct == null ? "-" : "%" + (q.atr_pct * 100).toFixed(1).replace(".", ",")],
+      [`${mark(q.checks.mature)} Fiyat verisi`, `${q.age_days} gün`],
+      [`${mark(q.checks.float)} Dolaşımdaki arz`, q.float == null ? "bilinmiyor" : "%" + Math.round(q.float * 100)],
+      [`${mark(q.checks.rank)} Piyasa değeri`, q.rank == null ? "bilinmiyor" : `${big(q.market_cap)} · ${q.rank}. sıra`],
+    ])}
+    <p class="muted" style="margin:6px 0 0">Dolaşımdaki arz düşükse arzın büyük kısmı ekip, yatırımcı ya da hazine cüzdanlarındadır (az cüzdanda yoğunlaşma, ileride kilit açılımı satış baskısı).
+      Piyasa değeri ve arz CoinGecko'dan.</p></section>`;
+}
+
 function renderDetail(d) {
   const s = d.signal, bt = d.backtest, ob = d.orderbook, tk = d.ticker;
   const parts = [];
@@ -1033,6 +1061,7 @@ function renderDetail(d) {
     grid.push(`<section class="card"><h2>Teknik göstergeler (bilgi)</h2><ul class="reasons">${s.reasons.map(r => `<li>${esc(r)}</li>`).join("")}</ul>
       <p class="muted">Eski teknik puan: ${s.score > 0 ? "+" : ""}${s.score}. Gerçek veride bu puanın AL/GÜÇLÜ AL sinyalleri rastgele alımdan iyi çıkmadığı için artık sinyal olarak kullanılmıyor.</p></section>`);
   }
+  if (d.quality) grid.push(renderQuality(d.quality));
   if (tk && tk.price) grid.push(`<section class="card"><h2>Son 24 saat</h2>${kv([
     ["Değişim", `<span class="${cls(tk.change_pct)}">${fmtPct(tk.change_pct)}</span>`],
     ["En yüksek", fmtPrice(tk.high)], ["En düşük", fmtPrice(tk.low)],
@@ -1089,6 +1118,13 @@ document.querySelectorAll("[data-filter]").forEach(b => b.onclick = () => {
   document.querySelectorAll("[data-filter]").forEach(x => x.classList.toggle("active", x === b));
   renderTable();
 });
+function syncCalm() { $("#calmToggle").classList.toggle("active", state.calmOnly); }
+$("#calmToggle").onclick = () => {
+  state.calmOnly = !state.calmOnly;
+  try { localStorage.setItem("calmOnly", state.calmOnly ? "1" : "0"); } catch (e) { /* yoksay */ }
+  syncCalm(); renderTable();
+};
+syncCalm();
 $("#search").oninput = e => { state.search = e.target.value; renderTable(); };
 document.querySelectorAll("th[data-sort]").forEach(th => th.onclick = () => {
   const key = th.dataset.sort;

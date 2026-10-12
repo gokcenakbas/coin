@@ -21,6 +21,7 @@ import pandas as pd
 
 from cointracker.indicators import add_indicators
 from cointracker.levels import support_resistance, support_state
+from cointracker.marketcap import price_quality
 from cointracker.trend import rule_stats, rule_trades, setup as trend_setup, trend_frame
 
 LEVELS = ["STRONG_SELL", "SELL", "HOLD", "BUY", "TREND", "STRONG_BUY"]
@@ -129,6 +130,7 @@ class Signal:
     edge: dict = field(default_factory=dict)  # eski puanın AL/SAT isabeti ve rastgele günle kıyası
     setup: dict | None = None  # trend kırılımı kuralına göre durum, alım bölgesi, stop, satış seviyesi
     rule: dict = field(default_factory=dict)  # kuralın bu coindeki son 5 yıllık işlemleri
+    price_quality: dict = field(default_factory=dict)  # son 90 günün oynaklığı ve veri yaşı (sakin liste)
 
     @property
     def label(self) -> str:
@@ -296,6 +298,7 @@ def analyze(symbol: str, df: pd.DataFrame, cfg: dict, scored: pd.DataFrame | Non
         _, resistances = support_resistance(complete, st["atr"], limit=3)
         supports, _ = support_resistance(complete, st["atr"], limit=3, gap_atr=0)  # fiyatın hemen altındaki de
     support = support_state(complete, st["atr"])
+    signal.price_quality = price_quality(complete)
 
     signal.plan = {
         "action": {"BUY": "AL", "ABOVE_ZONE": "TUT", "TREND": "TUT", "EXIT": "SAT", "WAIT": "BEKLE"}[st["state"]],

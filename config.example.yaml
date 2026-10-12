@@ -10,6 +10,11 @@ universe:
   quote: USDT
   symbols: [BTC, ETH, SOL, BNB, XRP, AVAX, LINK]   # mode: list iken kullanılır
   exclude: []               # takip etmek istemediğiniz coinler, ör. [PEPE, SHIB]
+  quality:                  # "🛡 Sakin liste" ölçütleri (arayüzde açılıp kapatılır)
+    max_atr_pct: 0.075      # son 90 günde ortalama günlük oynaklık en fazla %7,5
+    min_age_days: 365       # en az 1 yıllık fiyat verisi
+    min_float: 0.5          # arzın en az yarısı dolaşımda (CoinGecko)
+    max_rank: 200           # piyasa değeri sırası en fazla 200 (CoinGecko)
 
 signals:
   strong_buy_threshold: 4   # puan >= 4  -> GÜÇLÜ AL

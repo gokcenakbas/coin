@@ -28,6 +28,8 @@ from optimize import load  # noqa: E402
 from support import scan  # noqa: E402
 
 from cointracker.config import DEFAULT_CONFIG, _deep_merge  # noqa: E402
+from cointracker.data import base_asset  # noqa: E402
+from cointracker.marketcap import evaluate, fetch_markets, price_quality  # noqa: E402
 from cointracker.trend import rule_trades, trend_frame  # noqa: E402
 
 MIN_EVENTS = 12
@@ -99,6 +101,25 @@ def main() -> None:
             pf = gains / losses if losses > 0 else np.inf
             print(f"   {g:>6} / {name:>6}: {len(r):>4} işlem, başarı %{(r > 0).mean() * 100:.0f}, "
                   f"ort. {r.mean() * 100:+.1f}%, medyan {r.median() * 100:+.1f}%, PF {pf:.2f}, en kötü {r.min() * 100:+.0f}%")
+
+    # 4) Bugünkü sakin liste (uygulamadaki 🛡 düğmesiyle aynı ölçütler)
+    print()
+    try:
+        mc = fetch_markets()
+        print(f"4) Bugünkü sakin liste (CoinGecko: {len(mc)} coin)")
+    except Exception as exc:  # noqa: BLE001
+        mc = {}
+        print(f"4) Bugünkü sakin liste (CoinGecko'ya ulaşılamadı: {exc})")
+    calm, out = [], []
+    for sym, df in frames.items():
+        base = base_asset(sym, "USDT")
+        q = evaluate(price_quality(df), mc.get(base))
+        (calm if q["calm_list"] else out).append((base, q))
+    print(f"   Listede ({len(calm)}): " + ", ".join(
+        f"{b} (%{q['atr_pct'] * 100:.1f}, arz %{(q['float'] or 0) * 100:.0f}, #{q['rank']})" for b, q in calm))
+    print(f"   Dışarıda ({len(out)}):")
+    for b, q in out:
+        print(f"     {b}: {'; '.join(q['reasons'])}")
 
 
 if __name__ == "__main__":
