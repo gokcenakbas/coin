@@ -69,7 +69,7 @@ def test_store_caches_and_survives_network_errors(tmp_path):
 def test_price_quality_and_evaluate(cfg):
     calm = score_frame(make_ohlcv(np.linspace(100, 120, 500)), cfg)
     pq = price_quality(calm)
-    assert pq["age_days"] == 500 and 0 < pq["atr_pct"] < 0.075
+    assert pq["age_days"] == 500 and 0 < pq["atr_pct"] < 0.06
     q = evaluate(pq, {"rank": 10, "circulating": 90, "total": 100, "market_cap": 1e10})
     assert q["calm_list"] and q["float"] == pytest.approx(0.9) and not q["reasons"]
 
@@ -81,5 +81,8 @@ def test_price_quality_and_evaluate(cfg):
     # CoinGecko verisi yoksa yalnızca fiyat ölçüleri karar verir
     unknown = evaluate(pq, None)
     assert unknown["calm_list"] and unknown["checks"]["float"] is None and unknown["rank"] is None
+    # liste alındı ama coin ilk 500'de yok: küçük coin, dışarıda
+    tiny = evaluate(pq, None, market_known=True)
+    assert not tiny["calm_list"] and "ilk 500" in tiny["reasons"][0]
     young = evaluate({"atr_pct": 0.03, "age_days": 120}, None)
     assert not young["calm_list"] and "en az 365 gün" in young["reasons"][0]

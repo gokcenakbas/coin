@@ -113,7 +113,7 @@ def main() -> None:
     calm, out = [], []
     for sym, df in frames.items():
         base = base_asset(sym, "USDT")
-        q = evaluate(price_quality(df), mc.get(base))
+        q = evaluate(price_quality(df), mc.get(base), market_known=bool(mc))
         (calm if q["calm_list"] else out).append((base, q))
     print(f"   Listede ({len(calm)}): " + ", ".join(
         f"{b} (%{q['atr_pct'] * 100:.1f}, arz %{(q['float'] or 0) * 100:.0f}, #{q['rank']})" for b, q in calm))

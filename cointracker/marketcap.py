@@ -26,8 +26,9 @@ COINGECKO_MARKETS = "https://api.coingecko.com/api/v3/coins/markets"
 CACHE_TTL = 6 * 3600
 CACHE_MAX_AGE = 7 * 24 * 3600
 
-# tools/research/quality.py (Ekim 2026, 67 coin, 5 yıl): düşük oynaklıklı üçte birin üst sınırı ≈ %7,6
-DEFAULT_QUALITY = {"max_atr_pct": 0.075, "min_age_days": 365, "min_float": 0.5, "max_rank": 200}
+# Oynaklık sınırı: tools/research/quality.py'de düşük oynaklıklı üçte bir (eğitim dönemi) ≤ %7,6 idi; Ekim 2026'nın
+# daha sakin piyasasında %7,5 memecoinleri de içeri aldığı için %6 seçildi (BTC ≈ %2,7, ETH ≈ %3,6, PEPE ≈ %6,8).
+DEFAULT_QUALITY = {"max_atr_pct": 0.06, "min_age_days": 365, "min_float": 0.5, "max_rank": 200}
 
 
 def fetch_markets(pages: int = 2, session: requests.Session | None = None) -> dict[str, dict]:
@@ -103,8 +104,12 @@ def price_quality(df: pd.DataFrame) -> dict:
     return {"atr_pct": float(atr_pct) if pd.notna(atr_pct) else None, "age_days": int(len(df))}
 
 
-def evaluate(pq: dict, mc: dict | None, rules: dict | None = None) -> dict:
-    """Sakin listeye girer mi? Her ölçü için ok (True/False/None = bilinmiyor) ve nedenler."""
+def evaluate(pq: dict, mc: dict | None, rules: dict | None = None, market_known: bool = False) -> dict:
+    """Sakin listeye girer mi? Her ölçü için ok (True/False/None = bilinmiyor) ve nedenler.
+
+    market_known: CoinGecko listesi elimizde mi. Elimizdeyse ama coin içinde yoksa piyasa değeri ilk ~500'ün
+    dışındadır (küçük coin) ve sıra ölçüsünden kalır; liste hiç alınamadıysa ölçü bilinmiyor sayılır.
+    """
     r = {**DEFAULT_QUALITY, **(rules or {})}
     float_ratio = None
     if mc and mc.get("circulating") and (mc.get("total") or mc.get("max")):
@@ -115,7 +120,7 @@ def evaluate(pq: dict, mc: dict | None, rules: dict | None = None) -> dict:
         "calm": None if pq.get("atr_pct") is None else pq["atr_pct"] <= r["max_atr_pct"],
         "mature": pq.get("age_days", 0) >= r["min_age_days"],
         "float": None if float_ratio is None else float_ratio >= r["min_float"],
-        "rank": None if rank is None else rank <= r["max_rank"],
+        "rank": (False if market_known else None) if rank is None else rank <= r["max_rank"],
     }
     reasons = []
     if checks["calm"] is False:
@@ -125,7 +130,8 @@ def evaluate(pq: dict, mc: dict | None, rules: dict | None = None) -> dict:
     if checks["float"] is False:
         reasons.append(f"arzın yalnızca %{float_ratio * 100:.0f}'ı dolaşımda (gerisi ekip/yatırımcı/hazine cüzdanlarında)")
     if checks["rank"] is False:
-        reasons.append(f"piyasa değeri sırası {rank} (sınır {r['max_rank']})")
+        reasons.append(f"piyasa değeri sırası {rank} (sınır {r['max_rank']})" if rank is not None
+                       else "piyasa değeri ilk 500'de değil (çok küçük coin)")
     return {
         "calm_list": all(v is not False for v in checks.values()),
         "checks": checks, "reasons": reasons,

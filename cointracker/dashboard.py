@@ -403,7 +403,8 @@ class DashboardApp:
 
     # ---- API ----------------------------------------------------------------
     def quality(self, r: CoinAnalysis, base: str) -> dict:
-        return evaluate_quality(r.signal.price_quality, self.mcap.get(base), self.quality_rules)
+        return evaluate_quality(r.signal.price_quality, self.mcap.get(base), self.quality_rules,
+                                market_known=bool(self.mcap.data))
 
     def _summary(self, r: CoinAnalysis, base: str) -> dict:
         s, bt = r.signal, r.backtest

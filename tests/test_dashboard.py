@@ -287,5 +287,6 @@ def test_quality_in_payloads(app):
     items = {i["symbol"]: i for i in app.signals_payload()["items"]}
     qa, qb = items["AAAUSDT"]["quality"], items["BBBUSDT"]["quality"]
     assert qa["checks"]["float"] is False and not qa["calm_list"] and qa["rank"] == 50
-    assert qb["checks"]["float"] is None and qb["age_days"] > 365 and qb["atr_pct"] > 0
+    assert qb["checks"]["float"] is None and qb["checks"]["rank"] is False  # BBB CoinGecko listesinde yok
+    assert qb["age_days"] > 365 and qb["atr_pct"] > 0
     assert app.coin_payload("AAAUSDT")["quality"]["float"] == pytest.approx(0.3)

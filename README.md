@@ -224,6 +224,23 @@ Desteğe değince tutma oranı ≈ %58–60. Destekte alıp (stop desteğin 1 AT
 −%0,8, testte +%0,1 getirdi; rastgele alım +%0,2 / −%0,5. Yani "desteğe gelecek" tahmini işe yarıyor, ama destekte almak
 tek başına kâr getirmiyor; bu yüzden ayrı bir AL sinyali yapılmadı.
 
+**🛡 Sakin liste** — listedeki düğmeyle açılır, diğer filtrelerle birlikte çalışır. Bir coin şu dört ölçütü
+geçerse listede kalır (`universe.quality` ayarı, `cointracker/marketcap.py`):
+
+| Ölçüt | Sınır | Neden |
+|---|---|---|
+| Günlük oynaklık (son 90 gün, ATR / fiyat) | ≤ %6 | çok oynak coinleri (memecoin, yeni coin) dışarıda bırakır |
+| Fiyat verisi | ≥ 365 gün | destek/direnç son 1 yılın dönüş noktalarından bulunur |
+| Dolaşımdaki arz / toplam arz (CoinGecko) | ≥ %50 | düşükse arzın çoğu ekip/yatırımcı/hazine cüzdanlarındadır (yoğunlaşma, kilit açılımı) |
+| Piyasa değeri sırası (CoinGecko) | ≤ 200 | ilk 500'de olmayan küçük coinler de dışarıda |
+
+`tools/research/quality.py` ölçümü (67 coin, 5 yıl): bir coinde desteklerin geçmişte iyi tutması sonraki dönemde de
+iyi tutacağını göstermedi (eğitim ↔ test sıra korelasyonu −0,17), bu yüzden "destek/direncin çalıştığı coin" diye
+geçmişe bakarak seçim yapılmıyor. Düşük oynaklıklı coinlerde destekler biraz daha iyi tuttu (test %63, yüksek
+oynaklıkta %54); trend kuralı düşük oynaklıkta iki dönemde de artıda (+%0,2 / +%11,6), yüksek oynaklıkta çok değişken
+(+%26 / −%7). Gerçek "ilk 10 cüzdanın payı" verisi ücretsiz kaynaklarda düzenli bulunmadığı için dolaşımdaki arz
+oranı yaklaşık ölçü olarak kullanılır.
+
 **SAT:** günlük kapanış **20 günlük ortalamanın altına** inerse ertesi gün; ayrıca alış fiyatının **2 ATR altı**
 zarar-durdur. Trend sürdükçe tutulur. Uygulamada "✅ Aldım" ile alış fiyatınızı kaydederseniz
 satış kuralı tetiklendiğinde Mac bildirimi gelir (💼 Pozisyonlarım).
