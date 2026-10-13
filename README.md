@@ -171,6 +171,15 @@ gösterir; büyük hareket olasılığını söyler, yönünü söylemez. **⚡ 
 mumlarını izler: bir dakikadaki hacim normalin 5 katını aşar ve fiyat aynı dakikada %0,8'den fazla oynarsa haber verir
 (5 dakikada %3 eşiğini beklemeden).
 
+## Canlı kâğıt testi
+
+Geçmiş testin gerçek zamanda da tutup tutmadığını görmek için kural her gün sanal 1000 $ ile yürütülür
+(`cointracker/forwardtest.py`, `.github/workflows/forwardtest.yml`). Kurallar ve coin listesi (başlangıç günü hacme
+göre ilk 100) başlangıçta sabitlenir; alış sinyalin ertesi günü açılıştan, satış zarar-durdur (2 ATR) ya da 20 günlük
+ortalamanın altında kapanışla; en fazla 10 pozisyon, her yön %0,15 masraf. Yanında aynı kurallarla "yalnızca GÜÇLÜ AL"
+ve "yalnızca sakin liste" portföyleri ve BTC al-tut karşılaştırılır. Sonuç her gün güncellenir:
+**[paper/canli/RAPOR.md](paper/canli/RAPOR.md)**.
+
 ## GÜÇLÜ AL nasıl çalışır? (trend kırılımı kuralı)
 
 Eski teknik puanın GÜÇLÜ AL sinyali gerçek veride rastgele alımdan iyi çıkmadı (aşağıda). Bu yüzden asıl sinyal,
