@@ -46,7 +46,8 @@ def main() -> None:
             rows.append((s, p, sg, q, st))
         elif s.level == "TREND":
             trend.append(s)
-    out = [f"# Şu anki sinyaller — {results[0].signal.date:%d.%m.%Y} günlük kapanışına göre" if results else "# Sinyal yok",
+    as_of = (results[0].signal.setup or {}).get("as_of") if results else None
+    out = [f"# Şu anki sinyaller — {as_of:%d.%m.%Y} günlük kapanışına göre" if as_of is not None else "# Sinyal yok",
            "", f"Piyasa (BTC 200G üstü): **{'yeni alım AÇIK' if market else 'yeni alım KAPALI'}** · {len(symbols)} coin tarandı", ""]
     if rows:
         out += ["| Coin | Sinyal | Kırılım | Fiyat | Alım bölgesi | Durum | Zarar-durdur | Satış seviyesi (20G) | Oynaklık | 50G'ye uzaklık | BTC'ye göre 30g | 🛡 |",
