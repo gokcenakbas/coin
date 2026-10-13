@@ -122,10 +122,6 @@ td a,.kv a{color:var(--accent);text-decoration:none}
 .ctx button:hover{background:var(--hover)}
 .ctx small{color:var(--muted);float:right;margin-left:12px}
 #refreshBtn.busy{opacity:.7;pointer-events:none}
-#moversCard{grid-column:1/-1;display:none}
-#movers{display:flex;gap:8px;flex-wrap:wrap}
-#movers .move .tag{color:var(--muted);margin-left:6px}
-.move.early{border-color:var(--warn)}
 footer{color:var(--muted);font-size:12px;text-align:center;padding:4px 16px 20px}
 @media (max-width:700px){.hide-sm{display:none}#chart{height:320px}.tf{grid-template-columns:repeat(2,1fr)}input[type=search]{width:120px}}
 </style>
@@ -144,17 +140,12 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:4px 16px 20px
 
 <main id="main">
   <section class="card" style="grid-column:1/-1;display:none" id="movesCard">
-    <h2>Hızlı hareketler (5 dk içinde ±<span id="moveThr"></span>% · ⚡ = hacim patlamasıyla erken uyarı)</h2>
+    <h2>Hızlı hareketler (5 dk içinde ±<span id="moveThr"></span>%)</h2>
     <div id="moves"></div>
   </section>
 
   <section class="card" id="relCard"><h2>GÜÇLÜ AL nasıl çalışır, ne kadar güvenilir?</h2><div id="relBody"></div></section>
 
-  <section class="card" id="moversCard">
-    <h2>🚀 Patlama adayları <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400" id="moversInfo"></span></h2>
-    <div id="movers"></div>
-    <p class="muted" id="moversNote" style="margin:8px 0 0"></p>
-  </section>
 
   <section class="card" id="listCard">
     <div class="toolbar">
@@ -226,11 +217,6 @@ Grafikler: <a href="https://www.tradingview.com/" target="_blank" rel="noopener"
 <script>
 "use strict";
 const MOVE_THRESHOLD = 3;           // %
-// tools/research/fastmoves.py ile gerçek veride ölçülen sonuç (Ekim 2026, 39 coin, 1 yıllık saatlik veri)
-const MOVERS_NOTE = "Bu liste <b>büyük hareket olasılığını</b> gösterir, <b>yönünü değil</b>. Son 1 yılda herhangi bir saatte sonraki " +
-  "4 saatte ±%5 hareket olasılığı ~%6-7 idi; saatlik hacim normalin 3 katını geçtiğinde ~%16, 5 katını geçtiğinde ~%22, hacimli yukarı " +
-  "kırılımdan sonra ~%18-24'e çıktı. Ancak yukarı ve aşağı hareket neredeyse eşit sıklıkta oldu. \"Sıkışma\" (dar bant) ise olasılığı " +
-  "yarıya düşürdüğü için listede yok.";
 const MOVE_WINDOW_MS = 5 * 60e3;
 const MOVE_COOLDOWN_MS = 15 * 60e3;
 const WS_BASES = ["wss://data-stream.binance.vision", "wss://stream.binance.com:9443"];
@@ -255,7 +241,7 @@ const state = {
   items: [], bySym: {}, live: {}, filter: "all", search: "", sort: {key: "levelrank", dir: 1},
   calmOnly: (() => { try { return localStorage.getItem("calmOnly") === "1"; } catch (e) { return false; } })(),
   selected: null, interval: "1h", rowEls: {}, hist: {}, lastMove: {}, moves: [], detailTimer: null,
-  watch: {favorites: [], alarms: [], positions: []}, firedPos: new Set(), app: false, plan: null, baseline: {}, lastEarly: {}, firedAlarms: new Set(), autoSelected: false,
+  watch: {favorites: [], alarms: [], positions: []}, firedPos: new Set(), app: false, plan: null, firedAlarms: new Set(), autoSelected: false,
 };
 
 /* ---------------- 5 yıllık sinyal listesi ---------------- */
@@ -517,66 +503,6 @@ function applyTick(sym, tick, now = Date.now()) {
   }
 }
 
-/* ---------------- Patlama adayları ve erken uyarı ---------------- */
-const EARLY_RVOL = 5;          // dakikalık hacim normalin kaç katı olunca
-const EARLY_MOVE = 0.008;      // aynı dakikada en az %0,8 fiyat hareketiyle birlikte
-const EARLY_MIN_USD = 50000;   // çok sığ coinlerde yanlış alarmı önlemek için
-let moversTimer = null;
-const tagText = (c, t) => ({
-  volume: `📊 Hacim ${c.rvol.toFixed(1).replace(".", ",")}x`,
-  breakout_up: "⬆ 3 günlük tepe kırıldı",
-}[t] || t);
-
-async function loadMovers() {
-  clearTimeout(moversTimer);
-  let delay = 30e3;
-  try {
-    const d = await (await fetch("/api/movers")).json();
-    state.baseline = d.baseline || {};
-    const card = $("#moversCard");
-    card.style.display = d.updated ? "block" : "none";
-    $("#moversInfo").textContent = d.updated ? `· ${d.items.length} coin · ${new Date(d.updated).toLocaleTimeString("tr-TR", {hour: "2-digit", minute: "2-digit"})}` : "";
-    $("#movers").innerHTML = d.items.length ? d.items.map(c =>
-      `<div class="move" data-s="${esc(c.symbol)}" title="Son kapanmış saat: ${esc(c.hour)}"><b>${esc(c.base)}</b>${c.tags.map(t => `<span class="tag">${tagText(c, t)}</span>`).join("")}</div>`).join("")
-      : `<span class="muted">Şu an hacmi normalin 3 katını aşan ya da hacimle 3 günlük tepesini kıran coin yok.</span>`;
-    $("#moversNote").innerHTML = MOVERS_NOTE;
-    if (Object.keys(state.baseline).length) connectMinuteStream(Object.keys(state.baseline));
-    if (d.updated) delay = 5 * 60e3;
-  } catch (e) { /* sonraki turda tekrar dene */ }
-  moversTimer = setTimeout(loadMovers, delay);
-}
-
-// Tüm coinlerin 1 dakikalık mumları tek bağlantıdan: dakikalık hacim normalin EARLY_RVOL katını aşar ve
-// fiyat aynı dakikada EARLY_MOVE kadar oynarsa, 5 dakikalık %3 eşiği dolmadan erken uyarı ver.
-let minuteWs = null, minuteKey = "";
-function connectMinuteStream(symbols, attempt = 0) {
-  const key = symbols.slice().sort().join(",");
-  if (minuteWs && key === minuteKey && attempt === 0) return;
-  minuteKey = key;
-  if (minuteWs) { minuteWs.onclose = null; try { minuteWs.close(); } catch (e) {} }
-  const streams = symbols.map(s => s.toLowerCase() + "@kline_1m").join("/");
-  const ws = new WebSocket(`${WS_BASES[attempt % WS_BASES.length]}/stream?streams=${streams}`);
-  minuteWs = ws;
-  ws.onmessage = ev => { const m = JSON.parse(ev.data); if (m.data && m.data.k) onMinute(m.data.k); };
-  ws.onclose = () => { if (minuteWs === ws) setTimeout(() => connectMinuteStream(symbols, attempt + 1), Math.min(30e3, 2000 * (attempt + 1))); };
-}
-
-function onMinute(k) {
-  const sym = k.s, base = state.baseline[sym];
-  if (!base || !state.bySym[sym]) return;
-  const q = +k.q, chg = +k.c / +k.o - 1, rv = q / base, now = Date.now();
-  if (rv < EARLY_RVOL || q < EARLY_MIN_USD || Math.abs(chg) < EARLY_MOVE) return;
-  if (now - (state.lastEarly[sym] || 0) < 30 * 60e3) return;
-  state.lastEarly[sym] = now;
-  const coin = state.bySym[sym].base;
-  state.moves.unshift({sym, base: coin, chg, price: +k.c, at: new Date(now), mins: 1, early: true, rv});
-  state.moves = state.moves.slice(0, 30);
-  renderMoves();
-  const favs = favSet();
-  if (!favs.size || favs.has(sym))
-    notify(`⚡ Erken uyarı: ${coin} ${chg > 0 ? "▲" : "▼"} ${fmtPct(chg)}`, `1 dakikada hacim normalin ${rv.toFixed(1).replace(".", ",")} katı · fiyat ${fmtPrice(+k.c)} USDT`);
-}
-
 /* ---------------- Hızlı hareket uyarıları ---------------- */
 function trackMove(sym, price, now) {
   const h = state.hist[sym] || (state.hist[sym] = []);
@@ -679,8 +605,8 @@ function renderAlarms() {
 function renderMoves() {
   $("#movesCard").style.display = state.moves.length ? "" : "none";
   $("#moves").innerHTML = state.moves.map(m =>
-    `<div class="move ${m.early ? "early" : ""}" data-s="${esc(m.sym)}">${m.early ? "⚡ " : ""}<b>${esc(m.base)}</b> <span class="${cls(m.chg)}">${m.chg > 0 ? "▲" : "▼"} ${fmtPct(m.chg)}</span>
-     <span class="muted">${m.early ? `hacim ${m.rv.toFixed(1).replace(".", ",")}x · ` : ""}${m.mins} dk · ${m.at.toLocaleTimeString("tr-TR", {hour: "2-digit", minute: "2-digit"})}</span></div>`).join("");
+    `<div class="move" data-s="${esc(m.sym)}"><b>${esc(m.base)}</b> <span class="${cls(m.chg)}">${m.chg > 0 ? "▲" : "▼"} ${fmtPct(m.chg)}</span>
+     <span class="muted">${m.mins} dk · ${m.at.toLocaleTimeString("tr-TR", {hour: "2-digit", minute: "2-digit"})}</span></div>`).join("");
 }
 
 /* ---------------- Ayrıntı paneli ---------------- */
@@ -1184,7 +1110,6 @@ $("#showLevels").onchange = () => applyPlanLines();
 $("#detailBody").addEventListener("input", e => { if (e.target.closest("#pos")) updatePos(); });
 $("#detailBody").addEventListener("change", e => { if (e.target.closest("#pos")) saveSettings(); });
 $("#moves").onclick = e => { const m = e.target.closest("[data-s]"); if (m) selectCoin(m.dataset.s); };
-$("#movers").onclick = e => { const m = e.target.closest("[data-s]"); if (m) selectCoin(m.dataset.s); };
 $("#intervals").onclick = e => { const b = e.target.closest("[data-iv]"); if (b) { state.interval = b.dataset.iv; loadChart(); } };
 $("#showBB").onchange = () => loadChart();
 $("#closeDetail").onclick = () => {
@@ -1218,7 +1143,6 @@ async function refreshAll(reason) {
     await fetch("/api/refresh", {method: "POST", headers: {"Content-Type": "application/json"}, body: "{}"}).catch(() => {});
     connectMarket();                       // uykuda kopmuş olabilecek canlı fiyat bağlantısını yeniden kur
     await loadSignals();
-    minuteKey = ""; loadMovers();
     if (state.selected) { await loadChart(); resetChart(); loadDetail(); }
     toast(reason || "Güncellendi", "Fiyatlar, sinyaller ve grafik yenilendi");
   } finally {
@@ -1312,7 +1236,6 @@ loadSignals().then(() => {
   if (initial && (location.hash || window.innerWidth >= 1200)) selectCoin(initial);
 });
 connectMarket();
-loadMovers();
 </script>
 </body>
 </html>

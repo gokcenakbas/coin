@@ -166,10 +166,9 @@ ettirdi, bu yüzden uygulamaya eklenmedi. Sinyalleri tek başına karar olarak d
 | Hacimle 3 günlük dip kırılımı | tutarsız (2,3× / 1,0×) | — |
 | Sıkışma (Bollinger bandı 30 günün en darında) | **~%3 (0,4-0,5×)** | — |
 
-Panelin **🚀 Patlama adayları** kartı yalnızca tutarlı çıkan iki izi (hacim patlaması, hacimli yukarı kırılım)
-gösterir; büyük hareket olasılığını söyler, yönünü söylemez. **⚡ Erken uyarı** ise tüm coinlerin 1 dakikalık
-mumlarını izler: bir dakikadaki hacim normalin 5 katını aşar ve fiyat aynı dakikada %0,8'den fazla oynarsa haber verir
-(5 dakikada %3 eşiğini beklemeden).
+Bu öncü izler yönü söylemediği için panelde gösterilmiyor (eski "Patlama adayları" kartı ve dakikalık erken uyarı,
+her yenilemede 100 coin için ek veri indirip uygulamayı yavaşlattığı için kaldırıldı). Araştırma betiği
+`tools/research/fastmoves.py` ve `cointracker/movers.py` duruyor.
 
 ## Canlı kâğıt testi
 
