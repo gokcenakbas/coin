@@ -154,6 +154,28 @@ def main() -> None:
                 keep_te &= te[f] < q[1]
             print(f"  + {NAMES[f]} ({'düşük' if sgn > 0 else 'yüksek'} olanlar çıkarıldı): "
                   f"eğitim {stats(tr.loc[keep_tr, 'ret'])} | test {stats(te.loc[keep_te, 'ret'])}")
+    compare_rules(tr, te)
+
+
+def compare_rules(tr: pd.DataFrame, te: pd.DataFrame) -> None:
+    """Uygulamaya konabilecek seviye tanımları (sabit, yuvarlak eşikler: eğitimin üçte bir sınırları)."""
+    calm = lambda d: d["atr_pct"] < 0.077  # noqa: E731
+    fresh = lambda d: (d["stretch"] < 0.18) & (d["rs_btc_30"] < 0.08)  # noqa: E731
+    rules = {
+        "Bugünkü kural — tümü": lambda d: d.index == d.index,
+        "Bugünkü GÜÇLÜ AL (1y direnç)": lambda d: d["strong"] > 0,
+        "Bugünkü AL (direnç yok)": lambda d: d["strong"] == 0,
+        "Yeni: oynak olmayanlar (ATR < %7,7)": calm,
+        "Yeni GÜÇLÜ AL: sakin + aşırı uzamamış": lambda d: calm(d) & fresh(d),
+        "Yeni AL: sakin ama uzamış": lambda d: calm(d) & ~fresh(d),
+        "Elenen: çok oynak": lambda d: ~calm(d),
+    }
+    print("\nSEVİYE TANIMLARI (eğitim | test):")
+    for name, f in rules.items():
+        print(f"  {name:>40}: eğitim {stats(tr.loc[f(tr), 'ret'])} | test {stats(te.loc[f(te), 'ret'])}")
+    for y, part in pd.concat([tr, te]).groupby(lambda i: pd.concat([tr, te]).at[i, "date"].year):
+        new = part[calm(part) & fresh(part)]
+        print(f"  {y}: bugünkü kural {stats(part['ret'])} | yeni GÜÇLÜ AL {stats(new['ret'])}")
 
 
 if __name__ == "__main__":
