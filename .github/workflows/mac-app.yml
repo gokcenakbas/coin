@@ -49,7 +49,12 @@ jobs:
           mkdir -p dmg
           cp -R "dist/Coin Takip.app" dmg/
           ln -s /Applications dmg/Applications
-          hdiutil create -volname "Coin Takip" -srcfolder dmg -ov -format UDZO "CoinTakip-${{ matrix.label }}.dmg"
+          # GitHub'ın Mac makinelerinde hdiutil ara sıra "Resource busy" verir; birkaç kez dene
+          for i in 1 2 3 4 5; do
+            hdiutil create -volname "Coin Takip" -srcfolder dmg -ov -format UDZO "CoinTakip-${{ matrix.label }}.dmg" && exit 0
+            echo "hdiutil başarısız ($i. deneme), tekrar denenecek"; sleep $((i * 5))
+          done
+          exit 1
 
       - uses: actions/upload-artifact@v4
         with:
