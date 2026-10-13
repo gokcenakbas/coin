@@ -49,6 +49,9 @@ th:first-child,td:first-child{text-align:left}
 tbody tr{cursor:pointer}
 tbody tr:hover{background:var(--hover)}
 tbody tr.sel{background:var(--hover);box-shadow:inset 3px 0 0 var(--accent)}
+tbody tr.ready{background:var(--up-bg)}
+tbody tr.ready.sel{box-shadow:inset 3px 0 0 var(--up)}
+.ready-mark{margin-right:4px}
 .up{color:var(--up)}.down{color:var(--down)}.muted{color:var(--muted)}
 .badge{display:inline-block;padding:1px 8px;border-radius:6px;font-weight:600;font-size:12px}
 .b-STRONG_BUY{background:var(--up);color:#fff}.b-BUY{background:var(--up-bg);color:var(--up)}
@@ -150,6 +153,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:4px 16px 20px
   <section class="card" id="listCard">
     <div class="toolbar">
       <button data-filter="all" class="active">Tümü</button>
+      <button data-filter="ready" title="Girilebilir: GÜÇLÜ AL + fiyat alım bölgesinde + piyasa açık">✅ Girilebilir<span id="readyCount"></span></button>
       <button data-filter="buy">GÜÇLÜ AL / AL</button>
       <button data-filter="trend">Trendde</button>
       <button data-filter="sup" title="Fiyatı desteğe yaklaşan ya da destekte olan coinler (bilgi amaçlı, alım sinyali değil)">📉 Desteğe yakın</button>
@@ -239,6 +243,7 @@ const fmtUsd = v => v == null ? "-" : "$" + compact.format(v);
 
 const state = {
   items: [], bySym: {}, live: {}, filter: "all", search: "", sort: {key: "levelrank", dir: 1},
+  firedReady: new Set(), marketOpen: null, readyPrev: null,
   calmOnly: (() => { try { return localStorage.getItem("calmOnly") === "1"; } catch (e) { return false; } })(),
   selected: null, interval: "1h", rowEls: {}, hist: {}, lastMove: {}, moves: [], detailTimer: null,
   watch: {favorites: [], alarms: [], positions: []}, firedPos: new Set(), app: false, plan: null, firedAlarms: new Set(), autoSelected: false,
@@ -301,6 +306,7 @@ function renderMarket(m) {
   pill.style.display = "";
   pill.className = "pill " + (m.regime === "up" ? "up" : m.regime === "down" ? "down" : "");
   const open = m.btc_vs_sma200 != null && m.btc_vs_sma200 >= 0;
+  state.marketOpen = open;
   pill.textContent = `Piyasa: ${icon} ${m.label} · yeni alım ${open ? "AÇIK" : "KAPALI"}`;
   pill.title = `Bitcoin ${fmtPrice(m.btc_price)} $ · 200 günlük ortalamanın %${(Math.abs(m.btc_vs_sma200) * 100).toFixed(1).replace(".", ",")} ${m.btc_vs_sma200 >= 0 ? "üstünde" : "altında"} · ${trDate(m.since)} tarihinden beri`;
 }
@@ -340,6 +346,7 @@ function rowValue(item, key) {
   if (key === "chg24") return live ? live.c / live.o - 1 : null;
   if (key === "vol24") return live ? live.q : null;
   if (key === "symbol") return item.symbol;
+  if (key === "levelrank" && readyToEnter(item)) return -1;
   if (key === "levelrank") return {STRONG_BUY: 0, BUY: 1, TREND: 2, SELL: 3, HOLD: 4}[item.level] ?? 9;
   if (key === "vol") return item.quality ? item.quality.atr_pct : null;
   if (key === "sup_dist") return item.support && item.support.price ? item.support.price / rowValue(item, "price") - 1 : null;
@@ -355,6 +362,31 @@ function rowValue(item, key) {
 function livePrice(item) {
   const live = state.live[item.symbol];
   return live ? live.c : item.price;
+}
+
+// ✅ Girilebilir: GÜÇLÜ AL + fiyat şu an alım bölgesinde + piyasa (BTC 200G üstü) açık
+function readyToEnter(i) {
+  const p = i.plan, price = livePrice(i);
+  return i.level === "STRONG_BUY" && state.marketOpen !== false && !!p && p.buy_high != null && !!price &&
+    price >= p.buy_low && price <= p.buy_high;
+}
+const READY_TITLE = "Girilebilir: GÜÇLÜ AL + fiyat alım bölgesinde + piyasa açık";
+const readyMark = i => readyToEnter(i) ? `<span class="ready-mark" title="${READY_TITLE}">✅</span>` : "";
+// Bir coin gün içinde girilebilir hale gelince (fiyat bölgeye girince) günde bir kez haber ver
+function notifyReady(i) {
+  const key = i.symbol + ":" + new Date().toDateString();
+  if (state.firedReady.has(key)) return;
+  state.firedReady.add(key);
+  notify(`✅ ${i.base}: girilebilir`, `GÜÇLÜ AL ve fiyat alım bölgesinde (${fmtPrice(i.plan.buy_low)} – ${fmtPrice(i.plan.buy_high)}). ` +
+    `Zarar-durdur ≈ ${fmtPrice(i.plan.stop)}; miktarı coinin planındaki "Ne kadar alınmalı?" ile hesaplayın.`);
+}
+// Sayacı günceller; uygulama açıkken yeni "girilebilir" olan coin için bildirim gönderir (açılıştakiler için değil)
+function updateReadyCount() {
+  const ready = state.items.filter(readyToEnter);
+  $("#readyCount").textContent = ready.length ? ` (${ready.length})` : "";
+  const now = new Set(ready.map(i => i.symbol));
+  if (state.readyPrev) ready.filter(i => !state.readyPrev.has(i.symbol)).forEach(notifyReady);
+  state.readyPrev = now;
 }
 
 function buyCell(i) {
@@ -412,7 +444,7 @@ function tpFor(pos, p) {
 
 function renderTable() {
   const q = state.search.trim().toUpperCase(), favs = favSet();
-  const pass = i => state.filter === "all" || (state.filter === "fav" ? favs.has(i.symbol) :
+  const pass = i => state.filter === "all" || (state.filter === "ready" ? readyToEnter(i) : state.filter === "fav" ? favs.has(i.symbol) :
     state.filter === "pos" ? !!posFor(i.symbol) : state.filter === "buy" ? (i.level === "STRONG_BUY" || i.level === "BUY") :
     state.filter === "trend" ? i.level === "TREND" : state.filter === "sup" ? supNear(i) : i.level === "SELL");
   const calm = i => !state.calmOnly || (i.quality && i.quality.calm_list);
@@ -427,8 +459,8 @@ function renderTable() {
   const tbody = $("#rows");
   tbody.innerHTML = items.map(i => {
     const chg = rowValue(i, "chg24");
-    return `<tr data-s="${esc(i.symbol)}" class="${i.symbol === state.selected ? "sel" : ""}">
-      <td><span class="star ${favs.has(i.symbol) ? "on" : ""}" data-star="${esc(i.symbol)}" title="Takip listesine ekle/çıkar">${favs.has(i.symbol) ? "★" : "☆"}</span><b>${esc(i.base)}</b></td>
+    return `<tr data-s="${esc(i.symbol)}" class="${i.symbol === state.selected ? "sel" : ""} ${readyToEnter(i) ? "ready" : ""}">
+      <td><span class="star ${favs.has(i.symbol) ? "on" : ""}" data-star="${esc(i.symbol)}" title="Takip listesine ekle/çıkar">${favs.has(i.symbol) ? "★" : "☆"}</span><span data-f="ready">${readyMark(i)}</span><b>${esc(i.base)}</b></td>
       <td data-f="price">${fmtPrice(rowValue(i, "price"))}</td>
       <td data-f="chg" class="${cls(chg)}">${fmtPct(chg)}</td>
       <td data-f="vol" class="hide-sm hide-detail">${fmtUsd(rowValue(i, "vol24"))}</td>
@@ -440,8 +472,9 @@ function renderTable() {
       <td class="hide-sm" data-f="sup">${supCell(i)}</td>
       <td class="hide-sm" data-f="tgt">${tgtCell(i)}</td>
       <td class="hide-sm hide-detail">${i.rule && i.rule.trades ? `<span class="${cls(i.rule.avg)}">${fmtPct(i.rule.avg)}</span> <span class="muted">(${i.rule.trades})</span>` : "-"}</td></tr>`;
-  }).join("") || `<tr><td colspan="12" class="muted" style="text-align:center;padding:24px">${state.filter === "fav" ? "Takip listeniz boş — bir coinin yanındaki ☆ işaretine tıklayın." : state.filter === "pos" ? "Kayıtlı pozisyon yok — bir coinin planında \"Aldım\" düğmesini kullanın." : state.items.length ? (state.calmOnly ? "Bu filtreye uyan sakin coin yok — 🛡 Sakin liste düğmesini kapatmayı deneyin." : "Bu filtreye uyan coin yok.") : "Coin listesi yükleniyor…"}</td></tr>`;
+  }).join("") || `<tr><td colspan="12" class="muted" style="text-align:center;padding:24px">${state.filter === "ready" ? "Şu an girilebilir coin yok: GÜÇLÜ AL veren ve fiyatı alım bölgesinde olan coin bekleniyor. Beklemek de kuralın parçası." : state.filter === "fav" ? "Takip listeniz boş — bir coinin yanındaki ☆ işaretine tıklayın." : state.filter === "pos" ? "Kayıtlı pozisyon yok — bir coinin planında \"Aldım\" düğmesini kullanın." : state.items.length ? (state.calmOnly ? "Bu filtreye uyan sakin coin yok — 🛡 Sakin liste düğmesini kapatmayı deneyin." : "Bu filtreye uyan coin yok.") : "Coin listesi yükleniyor…"}</td></tr>`;
   tbody.querySelectorAll("tr[data-s]").forEach(tr => state.rowEls[tr.dataset.s] = tr);
+  if (state.items.length) updateReadyCount();
 }
 
 /* ---------------- Anlık fiyat akışı (tüm coinler, saniyede bir) ---------------- */
@@ -499,6 +532,12 @@ function applyTick(sym, tick, now = Date.now()) {
       if (tick.q != null) tr.querySelector('[data-f="vol"]').textContent = fmtUsd(tick.q);
       const item = state.bySym[t.s];
       if (item.plan) {
+        const ready = readyToEnter(item);
+        if (tr.classList.contains("ready") !== ready) {
+          tr.classList.toggle("ready", ready);
+          tr.querySelector('[data-f="ready"]').innerHTML = readyMark(item);
+          updateReadyCount();
+        }
         tr.querySelector('[data-f="buy"]').innerHTML = buyCell(item);
         tr.querySelector('[data-f="sup"]').innerHTML = supCell(item);
         tr.querySelector('[data-f="tgt"]').innerHTML = tgtCell(item);
@@ -832,6 +871,7 @@ function renderPlan(s) {
   const sg = p.signal;
   return `<section class="card"><h2>Ne zaman alınır, ne zaman satılır?</h2>
     <div class="plan-head"><span class="badge b-${actionLevel}" style="font-size:14px;padding:3px 12px">${esc(s.label)}</span><p>${esc(p.summary)}</p></div>
+    ${state.bySym[state.selected] && readyToEnter(state.bySym[state.selected]) ? `<p class="zone-in" style="margin:4px 0 8px">✅ Girilebilir: GÜÇLÜ AL + fiyat alım bölgesinde + piyasa açık. Miktarı aşağıdaki "Ne kadar alınmalı?" ile hesaplayın, borsada zarar-durdur emrini koyun.</p>` : ""}
     <ul class="cond">${p.conditions.map(c => `<li class="${c.ok ? "ok" : "no"}">${c.ok ? "✓" : "✗"} ${esc(c.text)}</li>`).join("")}</ul>
     <div class="levels">
       ${p.buy_high != null ? `<div class="lv buy"><span>Alım bölgesi</span><b>${fmtPrice(p.buy_low)} – ${fmtPrice(p.buy_high)}</b> ${inZone ? `<span class="zone-in" style="text-transform:none">✓ fiyat bölgede</span>` : dist(price > p.buy_high ? p.buy_high : p.buy_low)}</div>` : ""}
