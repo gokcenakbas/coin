@@ -4,7 +4,7 @@ Geçmiş testin (tools/research/) gerçek zamanda da tutup tutmadığını görm
 
   Evren      : başlangıç günü Binance'te hacme göre ilk 100 USDT paritesi (sonra değişmez)
   Sinyal     : günlük kapanışta trend kırılımı (cointracker/trend.py; coin ve BTC 200G üstü, 50G > 200G,
-               kapanış 20 günün zirvesi). Kırılımda 1 yıllık direnç geçildiyse GÜÇLÜ AL, değilse AL.
+               kapanış 20 günün zirvesi, coin çok oynak değil). Aşırı uçmamışsa GÜÇLÜ AL, değilse AL.
   Alış       : sinyalin ertesi günü açılış fiyatından
   Satış      : gün içinde giriş − 2 ATR'ye (sinyal günü ATR'si) değerse o fiyattan; günlük kapanış 20 günlük
                ortalamanın altına inerse ertesi gün açılıştan
@@ -37,11 +37,12 @@ from cointracker.config import DEFAULT_CONFIG, _deep_merge
 from cointracker.data import BinanceClient, DataStore, base_asset, list_universe
 from cointracker.marketcap import evaluate, fetch_markets, price_quality
 from cointracker.signals import score_frame
-from cointracker.trend import FEE, MEASURED, STOP_ATR, broken_resistance, trend_frame
+from cointracker.trend import FEE, MAX_ATR_PCT, MEASURED, STOP_ATR, trend_frame
 
 log = logging.getLogger(__name__)
 BTC = "BTCUSDT"
-RULE_VERSION = "trend-kirilim-v1 (20G zirve, 1y direnç = GÜÇLÜ AL, stop 2 ATR, çıkış 20G ort.)"
+RULE_VERSION = ("trend-kirilim-v2 (20G zirve, çok oynak coin yok: ATR < %7,7; GÜÇLÜ AL = 50G ort.'nın en fazla %18 "
+                "üstünde ve 30 günde BTC'den en fazla +8 puan; stop 2 ATR, çıkış 20G ort.)")
 
 
 @dataclass(frozen=True)
@@ -82,10 +83,6 @@ def prepare(frames: dict[str, pd.DataFrame], start_day: pd.Timestamp, last_day: 
             continue
         tf = trend_frame(df, btc)
         tf["mom20"] = tf["close"] / tf["close"].shift(20) - 1
-        # GÜÇLÜ AL: kırılımda 1 yıllık direnç geçildi mi (yalnızca başlangıçtan sonraki sinyaller için hesaplanır)
-        tf["strong"] = False
-        for t in tf.index[(tf.index >= start_day) & tf["entry_sig"].to_numpy()]:
-            tf.at[t, "strong"] = broken_resistance(tf, t) is not None
         out[sym] = tf
     return out
 
@@ -228,11 +225,13 @@ def report(state: dict, results: dict, summary: dict, btc: dict, last_day: pd.Ti
     lines.append(f"| BTC al-tut | {_px(btc['value'])} $ | **{_p(btc['ret'])}** | {_p(btc['max_dd'])} | - | - | - | - |")
     lines += [
         "",
-        f"**Geçmiş testte beklenen** (32 coin, 5 yıl): kazanan işlem %{m['test']['win_rate'] * 100:.0f}–"
-        f"%{m['train']['win_rate'] * 100:.0f}, işlem başına ort. {_p(m['train']['avg'])} / {_p(m['test']['avg'])}, "
-        f"10 pozisyonlu portföyde en büyük düşüş {_p(m['portfolio10']['train_dd'], 0)} / {_p(m['portfolio10']['test_dd'], 0)}. "
-        "İşlemlerin çoğu küçük zararla kapanır; kâr az sayıdaki büyük yükselişten gelir. Bu yüzden ilk haftalarda zarar "
-        "görmek normaldir; anlamlı bir karşılaştırma için en az 30–50 kapanan işlem gerekir.",
+        f"**Geçmiş testte beklenen** (62 coin, 5 yıl, işlem başına; ilk 3 yıl / son 2 yıl): tüm sinyaller "
+        f"{_p(m['filters']['calm']['train_avg'])} / {_p(m['filters']['calm']['test_avg'])}, GÜÇLÜ AL "
+        f"{_p(m['filters']['strong']['train_avg'])} / {_p(m['filters']['strong']['test_avg'])}; kazanan işlem "
+        f"%{m['filters']['calm']['test_win'] * 100:.0f}–%{m['filters']['calm']['train_win'] * 100:.0f}. "
+        f"Çok oynak coinler (günlük ≥ %{MAX_ATR_PCT * 100:.1f}) alınmaz. İşlemlerin çoğu küçük zararla kapanır; kâr az sayıdaki "
+        "büyük yükselişten gelir. Bu yüzden ilk haftalarda zarar görmek normaldir; anlamlı bir karşılaştırma için en az "
+        "30–50 kapanan işlem gerekir.",
         "",
     ]
     main = results["all"]

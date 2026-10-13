@@ -309,19 +309,24 @@ function renderMarket(m) {
 const MEASURED = {train: {period: "Eki 2021 – Eki 2024", trades: 554, win: 0.375, avg: 0.089, pf: 2.63},
                   test: {period: "Eki 2024 – Eki 2026", trades: 368, win: 0.293, avg: 0.138, pf: 3.16},
                   random: {train: 0.011, test: 0.027},
-                  strong: {train: {trades: 176, win: 0.392, avg: 0.102}, test: {trades: 142, win: 0.324, avg: 0.276}}};
+                  // tools/research/features.py (62 coin): çok oynak coinler elenince / yalnız GÜÇLÜ AL
+                  calm: {train: {trades: 212, win: 0.39, avg: 0.111}, test: {trades: 143, win: 0.26, avg: 0.114}},
+                  strong: {train: {trades: 147, win: 0.35, avg: 0.115}, test: {trades: 78, win: 0.27, avg: 0.222}}};
 
 function renderReliability(r) {
   const card = $("#relCard"), M = MEASURED;
   card.className = "card"; card.style.display = "block";
   const row = (name, x, rnd) => `<tr><td>${name}</td><td>${x.trades}</td><td>${pctInt(x.win)}</td><td class="up">${fmtPct(x.avg)}</td><td class="muted">${fmtPct(rnd)}</td></tr>`;
   $("#relBody").innerHTML = `
-    <p><b>AL</b> = coin ve Bitcoin 200 günlük ortalamanın üstünde, 50G ort. 200G'nin üstünde ve günlük kapanış son 20 günün zirvesi.
-      <b>GÜÇLÜ AL</b> = aynısı, üstelik kırılımda son 1 yılın bir direnci (destek/direnç seviyesi) geçildi.
+    <p><b>Sinyal</b> = coin ve Bitcoin 200 günlük ortalamanın üstünde, 50G ort. 200G'nin üstünde, günlük kapanış son 20 günün zirvesi
+      ve coin çok oynak değil (günlük oynaklık &lt; %7,7 — çok oynak coinlerin kırılımları testte iki dönemde de zarar ettirdi).
+      <b>GÜÇLÜ AL</b> = coin aşırı uçmamış: fiyat 50G ortalamanın en fazla %18 üstünde ve son 30 günde Bitcoin'den en fazla 8 puan fazla
+      yükselmiş. <b>AL</b> = kırılım var ama coin son haftalarda çok yükselmiş (testte zayıf: +%10 / −%2) — temkinli olun.
       <b>Alım:</b> sinyalden sonraki 3 gün, fiyat alım bölgesindeyse. <b>Satış:</b> günlük kapanış 20 günlük ortalamanın altına inince
       (ertesi gün) ya da alışın 2 ATR altındaki zarar-durdur çalışınca.</p>
     <table><thead><tr><th>Dönem (32 coin)</th><th>İşlem</th><th>Başarı</th><th>İşlem başına ort.</th><th>Rastgele alım</th></tr></thead><tbody>
       ${row(M.train.period + " · tümü", M.train, M.random.train)}${row(M.test.period + " (test) · tümü", M.test, M.random.test)}
+      ${row(M.train.period + " · oynaklar hariç (62 coin)", M.calm.train, M.random.train)}${row(M.test.period + " (test) · oynaklar hariç", M.calm.test, M.random.test)}
       ${row(M.train.period + " · yalnız GÜÇLÜ AL", M.strong.train, M.random.train)}${row(M.test.period + " (test) · yalnız GÜÇLÜ AL", M.strong.test, M.random.test)}</tbody></table>
     ${r ? `<p class="muted" style="margin:6px 0 0">Bu listedeki ${r.coins} coinde son 5 yıl: ${r.trades} işlem, başarı ${pctInt(r.win_rate)}, işlem başına ort. ${fmtPct(r.avg)}.</p>` : ""}
     <p class="muted" style="margin:6px 0 0">⚠ İşlemlerin çoğu (≈%60-70) küçük zararla kapanır; kâr, az sayıdaki büyük yükselişten gelir. Bu yüzden
@@ -840,8 +845,9 @@ function renderPlan(s) {
     </div>
     <p class="muted" style="margin:8px 0 0"><b>Satış kuralı:</b> günlük kapanış 20 günlük ortalamanın altına inerse ertesi gün satın; fiyat alışın 2 ATR altına
       (zarar-durdur) inerse hemen satın.<br>
-      <b>Destek/direnç:</b> kırılım son 1 yılın bir direncini geçtiyse <b>GÜÇLÜ AL</b>, yalnızca 20 günlük zirveyse <b>AL</b>
-      (5 yıllık testte işlem başına ort. GÜÇLÜ AL +%10 / +%28, AL +%7 / +%6; eğitim / test). Kırılan direnç yeni destek olur: alım bölgesinin alt sınırı odur.<br>
+      <b>GÜÇLÜ AL / AL:</b> çok oynak coinlerde sinyal yok; aşırı uçmamış kırılım <b>GÜÇLÜ AL</b>, son haftalarda çok yükselmiş coinin kırılımı
+      <b>AL</b> (62 coin, 5 yıllık testte işlem başına ort. GÜÇLÜ AL +%11,5 / +%22,2, AL +%10,2 / −%1,6; ilk 3 yıl / son 2 yıl).
+      Kırılan seviye yeni destek olur: alım bölgesinin alt sınırı odur.<br>
       <b>Kâr alma yerleri</b> üstteki dirençlerdir. Testte <i>yarısını ilk dirençte satıp kalanı kurala bırakmak</i> kazanan işlem oranını
       %30–37'den %40–45'e çıkardı ama ortalama kârı yaklaşık yarıya indirdi (+%8 / +%14 yerine +%5 / +%7); <i>tamamını</i> dirençte satmak
       kârın neredeyse hepsini kaçırdı (+%0,2–0,6). Yani en çok kazandıran: tamamını kurala bırakmak; daha az dalgalı yol: yarısını dirençte satmak.

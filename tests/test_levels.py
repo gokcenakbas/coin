@@ -48,8 +48,8 @@ def test_plan_levels_are_consistent(cfg, seed):
     market = make_ohlcv(np.linspace(100, 300, 1900))
     sig = analyze("X", make_ohlcv(synthetic_prices(seed=seed)), cfg, market=market)
     p = sig.plan
-    assert p["action"] == {"STRONG_BUY": "AL", "TREND": "TUT", "SELL": "SAT"}.get(sig.level, "BEKLE")
-    assert p["summary"] and len(p["conditions"]) == 4
+    assert p["action"] == {"STRONG_BUY": "AL", "BUY": "AL", "TREND": "TUT", "SELL": "SAT"}.get(sig.level, "BEKLE")
+    assert p["summary"] and len(p["conditions"]) in (5, 6)
     assert sig.stop_loss == p["stop"] and p["stop"] < p["price"]
     assert p["exit_level"] > 0
     if p["action"] == "AL":

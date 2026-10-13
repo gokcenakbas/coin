@@ -77,7 +77,7 @@ def main() -> None:
             continue
         tf = trend_frame(df, btc)
         atrp = tf["atr"] / tf["close"]
-        for t in rule_trades(tf, since=start):
+        for t in rule_trades(tf, since=start, signal="brk_sig"):
             if t["open"]:
                 continue
             i = tf.index.get_loc(t["entry_date"]) - 1

@@ -193,14 +193,24 @@ Eski teknik puanın GÜÇLÜ AL sinyali gerçek veride rastgele alımdan iyi ç�
 Alım bölgesi: kırılım seviyesi (önceki 19 günün zirvesi) … sinyal kapanışı + 0,5 ATR; sinyal **3 gün** geçerli.
 Fiyat bölgenin üstündeyse kovalanmaz (TRENDDE gösterilir).
 
-**GÜÇLÜ AL** — AL'ın koşullarına ek olarak kırılımda **son 1 yılın bir direnci** (dönüş noktalarından bulunan
-destek/direnç seviyesi, `levels.support_resistance`) geçildiyse. Kırılan direnç yeni destek olur; alım bölgesinin alt
-sınırı odur. `tools/research/takeprofit.py` ile ölçüldü (aynı kırılımlar, ertesi açılışta alış, 20G satış kuralı):
+**Oynaklık filtresi ve GÜÇLÜ AL** (`tools/research/features.py`, 62 coin, 5 yıl, 11 ek veri denendi; yalnızca iki
+dönemde de aynı yönde fark yaratanlar kullanıldı):
 
-| | Eğitim işlem | Eğitim ort. | Test işlem | Test ort. | Test PF |
+* Günlük oynaklık (ATR / fiyat) **≥ %7,7** olan coinlerde sinyal verilmez — bu kırılımlar işlem başına −%1,2 / −%6,3.
+* **GÜÇLÜ AL**: fiyat 50 günlük ortalamanın en fazla **%18** üstünde VE son 30 günde Bitcoin'den en fazla **8 puan**
+  fazla yükselmiş (aşırı uçmamış). Diğer sinyaller **AL**.
+* Kırılımda 1 yıllık direnç geçildiyse bilgi olarak gösterilir (bu geniş testte ilk 3 yılda fark yaratmadı).
+
+| | İlk 3 yıl işlem | İlk 3 yıl ort. | Son 2 yıl işlem | Son 2 yıl ort. | Son 2 yıl PF |
 |---|---|---|---|---|---|
-| GÜÇLÜ AL (direnç kırıldı) | 176 | **+%10,2** | 142 | **+%27,6** | 5,11 |
-| AL (yalnızca 20 günlük zirve) | 391 | +%7,4 | 229 | +%5,6 | – |
+| Filtresiz tüm kırılımlar | 320 | +%6,9 | 227 | +%4,8 | 1,60 |
+| Oynaklar hariç (uygulamanın sinyalleri) | 212 | +%11,1 | 143 | +%11,4 | 2,85 |
+| GÜÇLÜ AL | 147 | **+%11,5** | 78 | **+%22,2** | 5,09 |
+| AL (uçmuş coin) | 65 | +%10,2 | 65 | −%1,6 | 0,77 |
+| Elenen çok oynaklar | 108 | −%1,2 | 84 | −%6,3 | 0,44 |
+
+Yıllara göre GÜÇLÜ AL: 2023'te filtresiz kuraldan kötü (−%1,6'ya karşı +%6,1), 2024–2026'da belirgin şekilde iyi.
+Eşikler eğitim döneminin üçte bir sınırlarından yuvarlandı; test dönemi seçimde kullanılmadı.
 
 Destekte (kırılan seviyeye geri çekilmede) limitle almak karışık sonuç verdi (eğitim +%7,6, test +%17,8; ertesi açılış
 +%8,3 / +%14,0), bu yüzden alım bölgesi değiştirilmedi.

@@ -29,14 +29,14 @@ def frame(prices, btc=UP_BTC):
     return trend_frame(make_ohlcv(prices), btc)
 
 
-def test_breakout_without_resistance_is_buy_with_levels():
-    prices = np.append(base_series(), 104.0)  # son gün 20 günün zirvesi; önünde 1 yıllık direnç yok
+def test_calm_breakout_in_uptrend_is_strong_buy_with_levels():
+    prices = np.append(base_series(), 104.0)  # son gün 20 günün zirvesi; sakin, aşırı uçmamış
     tf = frame(prices)
     st = setup(tf)
     assert tf["entry_sig"].iloc[-1]
-    assert st["state"] == "BUY" and st["level"] == "BUY" and st["label"] == "AL"
-    assert all(c["ok"] for c in st["conditions"][:4]) and not st["conditions"][4]["ok"]
-    assert st["signal"]["resistance"] is None
+    assert st["state"] == "BUY" and st["level"] == "STRONG_BUY" and st["label"] == "GÜÇLÜ AL"
+    assert len(st["conditions"]) == 6 and all(c["ok"] for c in st["conditions"])
+    assert st["signal"]["resistance"] is None and st["signal"]["stretch"] < 0.18
     assert st["buy_low"] < st["price"] <= st["buy_high"]
     assert st["buy_low"] == tf["close"].iloc[-20:-1].max()  # kırılım seviyesi = önceki 19 günün zirvesi
     assert np.isclose(st["stop"], st["price"] - 2 * tf["atr"].iloc[-1])
@@ -48,11 +48,28 @@ def test_breaking_a_one_year_resistance_is_strong_buy():
     st = setup(frame(prices))
     assert st["state"] == "BUY" and st["level"] == "STRONG_BUY" and st["label"] == "GÜÇLÜ AL"
     assert all(c["ok"] for c in st["conditions"])
-    assert 103 < st["signal"]["resistance"] < 105
-    assert "direnci kırıldı" in st["summary"]
-    # direnç kırılmadan (102'de) kapanış 20 günün zirvesi olsa da yalnızca AL
-    weak = setup(frame(np.append(resistance_series(), 99.5)))
-    assert weak["level"] == "BUY" and weak["signal"]["resistance"] is None
+    assert 103 < st["signal"]["resistance"] < 105  # 1 yıllık direnç bilgi olarak gösterilir
+    assert "direnci de geçildi" in st["summary"]
+
+
+def test_overextended_breakout_is_only_buy():
+    # yatay bant ardından tek günde %25 sıçrama: 50G ortalamanın çok üstünde → GÜÇLÜ AL değil, AL
+    st = setup(frame(np.append(base_series(), 125.0)))
+    assert st["state"] == "BUY" and st["level"] == "BUY" and st["label"] == "AL"
+    assert st["signal"]["stretch"] > 0.18 and not st["conditions"][-1]["ok"]
+    assert "temkinli" in st["summary"]
+
+
+def test_volatile_coin_breakout_gives_no_buy():
+    # her gün ±%12 sallanan coin: kırılım olsa da alım sinyali yok
+    wild = 100 * (1 + np.resize([-0.12, 0.12], 31))  # son 31 gün her gün ±%12 (son gün düşüş)
+    prices = np.concatenate([base_series(), wild, [130.0]])
+    tf = frame(prices)
+    st = setup(tf)
+    assert tf["brk_sig"].iloc[-1] and not tf["entry_sig"].iloc[-1]
+    assert st["level"] not in ("STRONG_BUY", "BUY") and not st["conditions"][4]["ok"]
+    if st["state"] == "TREND":
+        assert "çok oynak" in st["summary"]
 
 
 def test_no_buy_when_bitcoin_is_below_its_200_day_average():
@@ -137,4 +154,4 @@ def test_todays_unfinished_candle_does_not_create_a_signal(cfg):
     # aynı veri bir gün sonra (mum kapanmış) GÜÇLÜ AL verir
     shifted = analyze("X", make_ohlcv(prices, start=start - pd.Timedelta(days=1)), cfg,
                       market=make_ohlcv(np.linspace(100, 300, len(prices)), start=start - pd.Timedelta(days=1)))
-    assert shifted.level == "BUY"
+    assert shifted.level in ("STRONG_BUY", "BUY")

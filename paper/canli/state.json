@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "rule": "trend-kirilim-v1 (20G zirve, 1y direnç = GÜÇLÜ AL, stop 2 ATR, çıkış 20G ort.)",
+  "rule": "trend-kirilim-v2 (20G zirve, çok oynak coin yok: ATR < %7,7; GÜÇLÜ AL = 50G ort.'nın en fazla %18 üstünde ve 30 günde BTC'den en fazla +8 puan; stop 2 ATR, çıkış 20G ort.)",
   "config": {
     "start_cash": 1000.0,
     "slots": 10,
@@ -209,5 +209,6 @@
     "CAKEUSDT": true,
     "ZAMAUSDT": false,
     "CHIPUSDT": false
-  }
+  },
+  "rule_changed": "2026-10-13: v1 → v2 (henüz işlem yokken; oynaklık filtresi ve yeni GÜÇLÜ AL tanımı)"
 }
