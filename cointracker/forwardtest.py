@@ -212,8 +212,8 @@ def report(state: dict, results: dict, summary: dict, btc: dict, last_day: pd.Ti
         "# Canlı kâğıt testi — GÜÇLÜ AL / AL kuralı",
         "",
         f"Başlangıç: **{start:%d.%m.%Y}** · son tamamlanan gün: **{last_day:%d.%m.%Y}** · **{n_days} gün** · "
-        f"sanal {cfg.start_cash:,.0f} $ ile, {cfg.slots} pozisyona kadar, komisyon+kayma %{cfg.fee * 100:.2f} her yön."
-        .replace(",", "."),
+        f"sanal {_px(cfg.start_cash)} $ ile, en fazla {cfg.slots} pozisyon, komisyon+kayma "
+        f"%{cfg.fee * 100:.2f} her yön.".replace("%0.15", "%0,15"),
         "",
         f"Kural: {state['rule']}. Evren: başlangıçta hacme göre ilk {len(state['universe'])} coin (sabit).",
         "",
@@ -236,7 +236,7 @@ def report(state: dict, results: dict, summary: dict, btc: dict, last_day: pd.Ti
         "",
     ]
     main = results["all"]
-    if n_days and summary["all"]["closed"] + summary["all"]["open"] == 0:
+    if summary["all"]["closed"] + summary["all"]["open"] == 0:
         lines += ["Henüz işlem yok. Kural yalnızca Bitcoin 200 günlük ortalamanın üstündeyken ve bir coin 20 günlük "
                   "zirvesini kırdığında alım yapar; böyle bir gün gelene kadar beklemek de kuralın parçasıdır.", ""]
     if main["open"]:
