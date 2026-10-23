@@ -1,15 +1,15 @@
 # Canlı kâğıt testi — GÜÇLÜ AL / AL kuralı
 
-Başlangıç: **13.10.2026** · son tamamlanan gün: **21.10.2026** · **9 gün** · sanal 1.000 $ ile, en fazla 10 pozisyon, komisyon+kayma %0,15 her yön.
+Başlangıç: **13.10.2026** · son tamamlanan gün: **22.10.2026** · **10 gün** · sanal 1.000 $ ile, en fazla 10 pozisyon, komisyon+kayma %0,15 her yön.
 
 Kural: trend-kirilim-v2 (20G zirve, çok oynak coin yok: ATR < %7,7; GÜÇLÜ AL = 50G ort.'nın en fazla %18 üstünde ve 30 günde BTC'den en fazla +8 puan; stop 2 ATR, çıkış 20G ort.). Evren: başlangıçta hacme göre ilk 100 coin (sabit).
 
 | Portföy | Değer | Getiri | En büyük düşüş | Kapanan işlem | Başarı | İşlem başına ort. | Açık |
 |---|---|---|---|---|---|---|---|
-| GÜÇLÜ AL + AL (uygulamanın kuralı) | 1.004 $ | **+0,4%** | +0,0% | 0 | - | - | 2 |
+| GÜÇLÜ AL + AL (uygulamanın kuralı) | 989,06 $ | **-1,1%** | -1,5% | 0 | - | - | 2 |
 | Yalnızca GÜÇLÜ AL | 1.000 $ | **+0,0%** | +0,0% | 0 | - | - | 0 |
 | Yalnızca 🛡 sakin liste coinleri | 1.000 $ | **+0,0%** | +0,0% | 0 | - | - | 0 |
-| BTC al-tut | 1.026 $ | **+2,6%** | -2,0% | - | - | - | - |
+| BTC al-tut | 993,21 $ | **-0,7%** | -3,2% | - | - | - | - |
 
 **Geçmiş testte beklenen** (62 coin, 5 yıl, işlem başına; ilk 3 yıl / son 2 yıl): tüm sinyaller +11,1% / +11,4%, GÜÇLÜ AL +11,5% / +22,2%; kazanan işlem %26–%39. Çok oynak coinler (günlük ≥ %7.7) alınmaz. İşlemlerin çoğu küçük zararla kapanır; kâr az sayıdaki büyük yükselişten gelir. Bu yüzden ilk haftalarda zarar görmek normaldir; anlamlı bir karşılaştırma için en az 30–50 kapanan işlem gerekir.
 
@@ -17,8 +17,8 @@ Kural: trend-kirilim-v2 (20G zirve, çok oynak coin yok: ATR < %7,7; GÜÇLÜ AL
 
 | Coin | Sinyal | Alış günü | Alış | Son kapanış | Sonuç | Zarar-durdur | Satış seviyesi (20G) |
 |---|---|---|---|---|---|---|---|
-| PEPE | AL | 21.10 | 4,56e-06 | 4,63e-06 | +1,2% | 3,912e-06 | 4,168e-06 |
-| CRV | AL | 21.10 | 0,3917 | 0,4028 | +2,5% | 0,3321 | 0,363 |
+| PEPE | AL | 21.10 | 4,56e-06 | 4,4e-06 | -3,8% | 3,912e-06 | 4,175e-06 |
+| CRV | AL | 21.10 | 0,3917 | 0,3637 | -7,4% | 0,3321 | 0,3627 |
 
 ## Günlük değer (ana portföy, son 14 gün)
 
@@ -33,6 +33,7 @@ Kural: trend-kirilim-v2 (20G zirve, çok oynak coin yok: ATR < %7,7; GÜÇLÜ AL
 | 19.10 | 1.000 $ | 999,58 $ |
 | 20.10 | 1.000 $ | 1.013 $ |
 | 21.10 | 1.004 $ | 1.026 $ |
+| 22.10 | 989,06 $ | 993,21 $ |
 
 ---
 Sanal paradır; gerçek alım-satım yapılmaz. Sonuçlar her gün GitHub Actions ile güncellenir (`.github/workflows/forwardtest.yml`). Yatırım tavsiyesi değildir.
