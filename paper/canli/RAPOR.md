@@ -1,15 +1,15 @@
 # Canlı kâğıt testi — GÜÇLÜ AL / AL kuralı
 
-Başlangıç: **13.10.2026** · son tamamlanan gün: **04.11.2026** · **23 gün** · sanal 1.000 $ ile, en fazla 10 pozisyon, komisyon+kayma %0,15 her yön.
+Başlangıç: **13.10.2026** · son tamamlanan gün: **05.11.2026** · **24 gün** · sanal 1.000 $ ile, en fazla 10 pozisyon, komisyon+kayma %0,15 her yön.
 
 Kural: trend-kirilim-v2 (20G zirve, çok oynak coin yok: ATR < %7,7; GÜÇLÜ AL = 50G ort.'nın en fazla %18 üstünde ve 30 günde BTC'den en fazla +8 puan; stop 2 ATR, çıkış 20G ort.). Evren: başlangıçta hacme göre ilk 100 coin (sabit).
 
 | Portföy | Değer | Getiri | En büyük düşüş | Kapanan işlem | Başarı | İşlem başına ort. | Açık |
 |---|---|---|---|---|---|---|---|
-| GÜÇLÜ AL + AL (uygulamanın kuralı) | 976,68 $ | **-2,3%** | -3,3% | 4 | %0 | -8,1% | 1 |
-| Yalnızca GÜÇLÜ AL | 980,50 $ | **-1,9%** | -1,9% | 2 | %0 | -9,8% | 0 |
-| Yalnızca 🛡 sakin liste coinleri | 990,99 $ | **-0,9%** | -0,9% | 2 | %0 | -4,5% | 0 |
-| BTC al-tut | 982,08 $ | **-1,8%** | -8,7% | - | - | - | - |
+| GÜÇLÜ AL + AL (uygulamanın kuralı) | 969,26 $ | **-3,1%** | -3,5% | 4 | %0 | -8,1% | 2 |
+| Yalnızca GÜÇLÜ AL | 976,79 $ | **-2,3%** | -2,3% | 2 | %0 | -9,8% | 1 |
+| Yalnızca 🛡 sakin liste coinleri | 987,24 $ | **-1,3%** | -1,3% | 2 | %0 | -4,5% | 1 |
+| BTC al-tut | 928,21 $ | **-7,2%** | -9,5% | - | - | - | - |
 
 **Geçmiş testte beklenen** (62 coin, 5 yıl, işlem başına; ilk 3 yıl / son 2 yıl): tüm sinyaller +11,1% / +11,4%, GÜÇLÜ AL +11,5% / +22,2%; kazanan işlem %26–%39. Çok oynak coinler (günlük ≥ %7.7) alınmaz. İşlemlerin çoğu küçük zararla kapanır; kâr az sayıdaki büyük yükselişten gelir. Bu yüzden ilk haftalarda zarar görmek normaldir; anlamlı bir karşılaştırma için en az 30–50 kapanan işlem gerekir.
 
@@ -17,9 +17,8 @@ Kural: trend-kirilim-v2 (20G zirve, çok oynak coin yok: ATR < %7,7; GÜÇLÜ AL
 
 | Coin | Sinyal | Alış günü | Alış | Son kapanış | Sonuç | Zarar-durdur | Satış seviyesi (20G) |
 |---|---|---|---|---|---|---|---|
-| PEPE | AL | 21.10 | 4,56e-06 | 4,97e-06 | +8,7% | 3,912e-06 | 4,549e-06 |
-
-**Bugün açılışta:** alınacak: POL · satılacak: -
+| PEPE | AL | 21.10 | 4,56e-06 | 4,8e-06 | +4,9% | 3,912e-06 | 4,588e-06 |
+| POL | GÜÇLÜ AL | 05.11 | 0,09615 | 0,09265 | -3,9% | 0,08448 | 0,09182 |
 
 ## Kapanan işlemler (ana portföy, son 30)
 
@@ -34,7 +33,6 @@ Kural: trend-kirilim-v2 (20G zirve, çok oynak coin yok: ATR < %7,7; GÜÇLÜ AL
 
 | Gün | Değer | BTC al-tut |
 |---|---|---|
-| 22.10 | 989,06 $ | 993,21 $ |
 | 23.10 | 990,89 $ | 990,44 $ |
 | 24.10 | 989,42 $ | 986,77 $ |
 | 25.10 | 984,38 $ | 977,81 $ |
@@ -48,6 +46,7 @@ Kural: trend-kirilim-v2 (20G zirve, çok oynak coin yok: ATR < %7,7; GÜÇLÜ AL
 | 02.11 | 972,52 $ | 937,09 $ |
 | 03.11 | 974,49 $ | 944,87 $ |
 | 04.11 | 976,68 $ | 982,08 $ |
+| 05.11 | 969,26 $ | 928,21 $ |
 
 ---
 Sanal paradır; gerçek alım-satım yapılmaz. Sonuçlar her gün GitHub Actions ile güncellenir (`.github/workflows/forwardtest.yml`). Yatırım tavsiyesi değildir.
