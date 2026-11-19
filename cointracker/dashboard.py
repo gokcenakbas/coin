@@ -31,6 +31,7 @@ from cointracker.engine import CoinAnalysis, Engine
 from cointracker.exchanges import get_quotes
 from cointracker.indicators import add_indicators
 from cointracker.marketcap import MarketCapStore, evaluate as evaluate_quality
+from cointracker.timemachine import time_machine
 from cointracker.live import INTRADAY_TIMEFRAMES, orderbook_summary, ticker_summary, timeframe_signal
 from cointracker.signals import LABELS_TR, classify
 
@@ -470,6 +471,13 @@ class DashboardApp:
             for q in get_quotes(base_asset(symbol, self.quote), self.cfg["exchanges"])
         ]
 
+        tm = None
+        if analysis and analysis.signal.plan:
+            try:
+                tm = self._time_machine(symbol, analysis)
+            except Exception as exc:  # noqa: BLE001 — ayrıntı sayfası bunun yüzünden bozulmasın
+                log.warning("%s zaman makinesi hesaplanamadı: %s", symbol, exc)
+
         signal = None
         if analysis:
             signal = asdict(analysis.signal) | {"label": analysis.signal.label}
@@ -479,6 +487,7 @@ class DashboardApp:
             "base": base_asset(symbol, self.quote),
             "signal": signal,
             "quality": self.quality(analysis, base_asset(symbol, self.quote)) if analysis else None,
+            "timemachine": tm,
             "backtest": asdict(analysis.backtest) if analysis and analysis.backtest else None,
             "timeframes": timeframes,
             "orderbook": orderbook,
@@ -488,6 +497,15 @@ class DashboardApp:
         })
         self._detail_cache[symbol] = (time.time(), payload)
         return payload
+
+    def _time_machine(self, symbol: str, analysis: CoinAnalysis) -> dict | None:
+        """Bugünkü fiyattan bu coinin planı için 10.000 senaryo + kuralın bu coindeki gerçek geçmişi."""
+        df = self.engine.store.load(symbol)
+        if df is None or len(df) < 120:
+            return None
+        today = pd.Timestamp.now(tz="UTC").tz_localize(None).normalize()
+        df = add_indicators(df.loc[df.index < today])  # yalnızca kapanmış günler
+        return time_machine(df, analysis.signal.plan, analysis.signal.rule.get("trades_all", []))
 
     def klines_payload(self, symbol: str, interval: str) -> dict:
         if interval == "1d":

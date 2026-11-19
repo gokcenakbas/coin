@@ -170,6 +170,24 @@ Bu öncü izler yönü söylemediği için panelde gösterilmiyor (eski "Patlama
 her yenilemede 100 coin için ek veri indirip uygulamayı yavaşlattığı için kaldırıldı). Araştırma betiği
 `tools/research/fastmoves.py` ve `cointracker/movers.py` duruyor.
 
+## ⏳ Zaman Makinesi ve işlem öncesi kontrol
+
+[day-trader-skill](https://github.com/Jakeschincariol/day-trader-skill) paketinin (MIT) iki fikri coinlere ve
+uygulamanın günlük kuralına uyarlandı:
+
+* **Zaman Makinesi** (`cointracker/timemachine.py`, coin ayrıntısındaki kart): bugünkü fiyattan girilse, coinin
+  son 1 yılının kendi günlük mumlarından 10.000 senaryo üretir (tohum 19, tekrarlanabilir) ve her senaryoda planı
+  uygular: zarar-durdur (2 ATR), kâr alma yeri (ilk direnç, yoksa 2R), kapanış 20G ortalamanın altına inince çıkış,
+  en fazla 60 gün. Hedef / stop / 20G çıkış oranlarını, sonuç aralığını, tipik süreyi ve bir olasılık yelpazesi
+  gösterir. Geçmişin ortalama yönü çıkarılır (trend varsayımı yok). Simülasyon karar vermez: 20G çıkışı zarar eden
+  senaryoları stopa varmadan kapattığı için "hedef önce mi" oranı yapısal olarak iyi görünür; bu yüzden karar,
+  kuralın bu coindeki gerçek geçmişinden (en az 5 işlem) ya da genel 5 yıllık testten gelir.
+* **İşlem öncesi kontrol** (plan kutusu): sinyal, alım bölgesi, piyasa, aynı coinde açık pozisyon, en fazla 10
+  pozisyon, işlem başına risk, sakin liste ve Zaman Makinesi kararına bakıp **✅ GEÇER** ya da **⛔ ENGEL** der.
+
+Paketin hisseye özgü parçaları (ABD hisse tarayıcısı, Alpaca emir gönderimi, SEC bilançoları, kongre işlemleri)
+coinlerde karşılığı olmadığı için alınmadı.
+
 ## Canlı kâğıt testi
 
 Geçmiş testin gerçek zamanda da tutup tutmadığını görmek için kural her gün sanal 1000 $ ile yürütülür

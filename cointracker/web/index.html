@@ -98,6 +98,12 @@ td a,.kv a{color:var(--accent);text-decoration:none}
 .lv b{font-size:15px;font-variant-numeric:tabular-nums}
 .lv.buy{border-color:var(--up);background:var(--up-bg)}.lv.stop{border-color:var(--down);background:var(--down-bg)}
 .lv.tgt{border-color:var(--accent)}
+.tm-bar{display:flex;height:22px;border-radius:6px;overflow:hidden;margin:6px 0;font-size:11px;color:#fff}
+.tm-bar div{display:flex;align-items:center;justify-content:center;white-space:nowrap;overflow:hidden}
+.tm-verdict{padding:8px 10px;border-radius:8px;border:1px solid var(--line);margin:0 0 8px}
+.tm-verdict.up{border-color:var(--up);background:var(--up-bg)}.tm-verdict.down{border-color:var(--down);background:var(--down-bg)}
+.checks{list-style:none;padding:0;margin:6px 0}.checks li{margin:2px 0}
+.gate{font-weight:700;padding:2px 8px;border-radius:6px}.gate.pass{background:var(--up-bg);color:var(--up)}.gate.block{background:var(--down-bg);color:var(--down)}
 .plan-btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .zone-in{color:var(--up);font-weight:600}
 .sup-tag{display:inline-block;font-size:11px;font-weight:600;padding:1px 6px;border-radius:8px;background:var(--warn-bg,rgba(247,144,9,.14));color:var(--warn);white-space:nowrap}
@@ -895,6 +901,7 @@ function renderPlan(s) {
     ${renderSupport(s)}
     ${renderPosition(p)}
     <div id="pos">
+      ${renderChecks(s)}
       <h2 style="margin-bottom:8px">Ne kadar alınmalı?</h2>
       <div class="row">
         <label class="muted">Sermaye (USDT) <input id="posCap" type="text" inputmode="decimal" placeholder="ör. 1000" value="${state.watch.settings && state.watch.settings.capital != null ? state.watch.settings.capital : ""}"></label>
@@ -995,12 +1002,74 @@ function renderQuality(q) {
       Piyasa değeri ve arz CoinGecko'dan.</p></section>`;
 }
 
+// ⏳ Zaman Makinesi (fikir: github.com/Jakeschincariol/day-trader-skill → trader-timemachine)
+function renderTimeMachine(tm) {
+  const mc = tm.mc, v = tm.verdict, h = tm.history;
+  const pc = x => "%" + Math.round(x * 100);
+  const seg = (x, color, label) => x > 0.005 ? `<div style="width:${x * 100}%;background:${color}" title="${label} ${pc(x)}">${x > 0.08 ? label + " " + pc(x) : ""}</div>` : "";
+  // olasılık yelpazesi: 10.-50.-90. yüzdelik kapanış fiyatları, giriş / stop / hedef çizgileri
+  const W = 560, Ht = 160, pad = 14;
+  const ys = mc.fan.flatMap(f => [f.p10, f.p90]).concat([mc.stop, mc.target || mc.entry, mc.entry]);
+  const lo = Math.min(...ys), hi = Math.max(...ys), sx = i => pad + i / (mc.fan.length - 1) * (W - 2 * pad);
+  const sy = y => Ht - pad - (y - lo) / ((hi - lo) || 1) * (Ht - 2 * pad);
+  const band = mc.fan.map((f, i) => `${sx(i)},${sy(f.p90)}`).join(" ") + " " + mc.fan.slice().reverse().map((f, i) => `${sx(mc.fan.length - 1 - i)},${sy(f.p10)}`).join(" ");
+  const mid = mc.fan.map((f, i) => `${sx(i)},${sy(f.p50)}`).join(" ");
+  const hl = (y, color, t) => `<line x1="0" x2="${W}" y1="${sy(y)}" y2="${sy(y)}" stroke="${color}" stroke-dasharray="4 3"/><text x="${W - 4}" y="${sy(y) < 14 ? sy(y) + 11 : sy(y) - 3}" text-anchor="end" font-size="10" fill="${color}">${t} ${fmtPrice(y)}</text>`;
+  const svg = `<svg viewBox="0 0 ${W} ${Ht}" style="width:100%;height:auto;display:block" role="img" aria-label="Olasılık yelpazesi">
+    <polygon points="${band}" fill="var(--accent)" opacity=".15"/><polyline points="${mid}" fill="none" stroke="var(--accent)" stroke-width="2"/>
+    ${hl(mc.entry, "var(--muted)", "Giriş")}${hl(mc.stop, "var(--down)", "Stop")}${mc.target ? hl(mc.target, "var(--up)", "Hedef") : ""}</svg>`;
+  return `<section class="card"><h2>⏳ Zaman Makinesi — girmeden önce olasılıklar</h2>
+    <div class="tm-verdict ${v.tone}">${esc(v.text)}</div>
+    <p class="muted" style="margin:0 0 4px">Bugünkü fiyattan (${fmtPrice(mc.entry)}) girilse · zarar-durdur ${fmtPrice(mc.stop)} · kâr alma ${fmtPrice(mc.target)} (${esc(mc.target_source)}) · en fazla ${mc.horizon} gün:</p>
+    <div class="tm-bar">${seg(mc.p_target, "var(--up)", "Hedef")}${seg(mc.p_ma_exit, "var(--accent)", "20G çıkış")}${seg(mc.p_stop, "var(--down)", "Stop")}${seg(mc.p_open, "var(--muted)", "Açık")}</div>
+    ${kv([
+      ["Kârla kapanan senaryo", pc(mc.p_profit) + (mc.p_gain20 > 0.005 ? ` · +%20 ve üstü ${pc(mc.p_gain20)}` : "")],
+      ["Sonuç aralığı (%10 / orta / %90)", `${fmtPct(mc.ret_p10)} / ${fmtPct(mc.ret_p50)} / ${fmtPct(mc.ret_p90)}`],
+      ["Tipik süre", `${Math.round(mc.days_median)} gün`],
+      ["Bu coinde kuralın geçmişi", h.trades ? `${h.trades} işlem · kazanan %${Math.round(h.win_rate * 100)} · ort. ${fmtPct(h.avg)} · en iyi ${fmtPct(h.best)} / en kötü ${fmtPct(h.worst)}` : "henüz işlem yok"],
+    ])}
+    ${svg}
+    <p class="muted" style="margin:2px 0 0;font-size:11px">Mavi alan: senaryoların %80'inin önümüzdeki ${mc.horizon} gündeki fiyat aralığı; çizgi: ortadaki senaryo.</p>
+    <p class="muted" style="margin:6px 0 0">${esc(v.risk)} Senaryolar coinin son ${mc.lookback} gününün kendi mumlarından rastgele üretildi (tohum ${mc.seed}, tekrarlanabilir);
+      geçmişin ortalama yönü çıkarıldı, yani trend varsayımı yok. Bu bir tahmin değil: planın coinin oynaklığıyla nasıl davranacağını gösterir.
+      Karar, kuralın bu coindeki gerçek geçmişinden ya da genel 5 yıllık testten gelir. Masraflar dahil, kaldıraçsız.</p></section>`;
+}
+
+// İşlem öncesi kontrol (fikir: day-trader-skill → trader-risk): GEÇER / ENGEL
+function renderChecks(s) {
+  const item = state.bySym[state.selected], p = s.plan, tm = state.tm;
+  if (!item || !p) return "";
+  const settings = state.watch.settings || {};
+  const riskPct = settings.risk_pct ?? 1;
+  const open = (state.watch.positions || []).length;
+  const price = livePrice(item);
+  const inZone = p.buy_high != null && price >= p.buy_low && price <= p.buy_high;
+  const rows = [
+    [s.level === "STRONG_BUY" ? "ok" : s.level === "BUY" ? "warn" : "block",
+      s.level === "STRONG_BUY" ? "Sinyal GÜÇLÜ AL" : s.level === "BUY" ? "Sinyal yalnızca AL (coin uçmuş, testte zayıf)" : `Alım sinyali yok (${s.label})`],
+    [inZone ? "ok" : "block", inZone ? "Fiyat alım bölgesinde" : p.buy_high == null ? "Alım bölgesi yok" : "Fiyat alım bölgesinin dışında — kovalama"],
+    [state.marketOpen !== false ? "ok" : "block", state.marketOpen !== false ? "Piyasa açık (BTC 200G üstü)" : "Piyasa kapalı (BTC 200G altı) — yeni alım yok"],
+    [posFor(state.selected) ? "block" : "ok", posFor(state.selected) ? "Bu coinde zaten açık pozisyonunuz var" : "Bu coinde açık pozisyon yok"],
+    [open >= 10 ? "block" : "ok", `Açık pozisyon ${open} / en fazla 10`],
+    [riskPct > 2 ? "block" : riskPct > 1 ? "warn" : "ok", `İşlem başına risk %${String(riskPct).replace(".", ",")} (öneri en fazla %1)`],
+    [item.quality && item.quality.calm_list ? "ok" : "warn", item.quality && item.quality.calm_list ? "Sakin listede" : "Sakin listede değil (oynak / küçük coin)"],
+  ];
+  if (tm) rows.push([tm.verdict.tone === "down" ? "warn" : "ok", "Zaman Makinesi: " + (tm.verdict.tone === "up" ? "geçmişi olumlu" : tm.verdict.tone === "down" ? "geçmişi olumsuz" : "nötr")]);
+  const blocked = rows.some(r => r[0] === "block");
+  const icon = {ok: "✅", warn: "⚠️", block: "⛔"};
+  return `<div class="posbox" style="margin-bottom:10px"><b>İşlem öncesi kontrol</b> <span class="gate ${blocked ? "block" : "pass"}">${blocked ? "⛔ ENGEL" : "✅ GEÇER"}</span>
+    <ul class="checks">${rows.map(r => `<li>${icon[r[0]]} ${esc(r[1])}</li>`).join("")}</ul>
+    <p class="muted" style="margin:0">${blocked ? "Engelleyen madde varken alım yapmayın; engel kalkınca liste kendiliğinden güncellenir." : "Her şey uygun. Miktarı aşağıdan hesaplayın, borsada zarar-durdur emrini koyun, sonra \"✅ Aldım, takip et\"."}</p></div>`;
+}
+
 function renderDetail(d) {
   const s = d.signal, bt = d.backtest, ob = d.orderbook, tk = d.ticker;
   const parts = [];
   state.plan = s && s.plan ? {...s.plan, symbol: d.symbol} : null;
+  state.tm = d.timemachine || null;
   applyPlanLines();
   if (state.plan) parts.push(renderPlan(s));
+  if (d.timemachine) parts.push(renderTimeMachine(d.timemachine));
 
   // Zaman dilimleri
   parts.push(`<section class="card"><h2>Kısa vadeli göstergeler (eski teknik puan — yalnızca bilgi)</h2><div class="tf">${d.timeframes.map(t => `

@@ -280,3 +280,9 @@ def test_quality_in_payloads(app):
     assert qb["checks"]["float"] is None and qb["checks"]["rank"] is False  # BBB CoinGecko listesinde yok
     assert qb["age_days"] > 365 and qb["atr_pct"] > 0
     assert app.coin_payload("AAAUSDT")["quality"]["float"] == pytest.approx(0.3)
+
+
+def test_coin_payload_has_time_machine(app):
+    tm = app.coin_payload("AAAUSDT")["timemachine"]
+    assert tm and tm["mc"]["replays"] == 10000 and tm["verdict"]["text"] and tm["verdict"]["risk"]
+    assert 0 <= tm["mc"]["p_stop"] <= 1 and tm["history"]["trades"] >= 0
